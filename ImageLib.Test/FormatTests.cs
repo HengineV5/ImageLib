@@ -1,0 +1,196 @@
+﻿using ImageLib.Png;
+using ImageLib.Hdr;
+using MathLib;
+using System.Buffers;
+
+using Rgba32 = MathLib.Rgba<MathLib.UInt8, MathLib.Rgba_Ops_Generic<MathLib.UInt8>>;
+using Rgba64 = MathLib.Rgba<MathLib.UInt16, MathLib.Rgba_Ops_Generic<MathLib.UInt16>>;
+using Rgb24 = MathLib.Rgb<MathLib.UInt8, MathLib.Rgb_Ops_Generic<MathLib.UInt8>>;
+using Rgb48 = MathLib.Rgb<MathLib.UInt16, MathLib.Rgb_Ops_Generic<MathLib.UInt16>>;
+
+namespace ImageLib.Test
+{
+	public class Tests
+	{
+		Memory<byte> img_png_rgba32;
+		Memory<byte> img_png_rgb24;
+		Memory<byte> img_hdr;
+
+		[SetUp]
+		public void Setup()
+		{
+			img_png_rgba32 = File.ReadAllBytes("TestImages/Png/Test_RGBA32.png");
+			img_png_rgb24 = File.ReadAllBytes("TestImages/Png/Test_RGB24.png");
+			img_hdr = File.ReadAllBytes("TestImages/Hdr/Test.hdr");
+		}
+
+		[Test]
+		public void TestPng()
+		{
+			TestHelpers.TestFormat<Rgba32, PngConfig>(img_png_rgba32.Span, AssertImage);
+			TestHelpers.TestFormat<Rgba64, PngConfig>(img_png_rgba32.Span, AssertImage);
+			TestHelpers.TestFormat<Rgba32, Rgb24, PngConfig>(img_png_rgba32.Span, AssertImage);
+			TestHelpers.TestFormat<Rgb24, Rgba32, PngConfig>(img_png_rgba32.Span, AssertImage);
+
+			TestHelpers.TestFormat<Rgb24, PngConfig>(img_png_rgb24.Span, AssertImage);
+			TestHelpers.TestFormat<Rgb24, Rgba32, PngConfig>(img_png_rgba32.Span, AssertImage);
+			TestHelpers.TestFormat<Rgba32, Rgb24, PngConfig>(img_png_rgba32.Span, AssertImage);
+
+			TestHelpers.TestFormat<Rgba64, Rgb24, PngConfig>(img_png_rgba32.Span, AssertImage);
+			TestHelpers.TestFormat<Rgba64, Rgb48, PngConfig>(img_png_rgba32.Span, AssertImage);
+		}
+
+		[Test]
+		public void TestHdr()
+		{
+			var pixel1 = new Rgba64(44287, 33791, 0, 0);
+			var pixel2 = new Rgba64(16895, 12543, 35839, 0);
+
+			TestHelpers.TestFormatLoad<Rgba64, HdrConfig>(img_hdr.Span, x => {
+				AssertPixel(in x[10, 15], in pixel1);
+				AssertPixel(in x[23, 25], in pixel2);
+			});
+		}
+
+		static void AssertImage(Image<Rgba32> oldImg, Image<Rgba32> newImg)
+		{
+			for (int y = 0; y < oldImg.Height; y++)
+			{
+				for (int x = 0; x < oldImg.Width; x++)
+				{
+					ref var oldPixel = ref oldImg[x, y];
+					ref var newPixel = ref newImg[x, y];
+
+					Assert.That(oldPixel.r == newPixel.r, Is.True);
+					Assert.That(oldPixel.g == newPixel.g, Is.True);
+					Assert.That(oldPixel.b == newPixel.b, Is.True);
+					Assert.That(oldPixel.a == newPixel.a, Is.True);
+				}
+			}
+		}
+
+		static void AssertImage(Image<Rgba64> oldImg, Image<Rgba64> newImg)
+		{
+			for (int y = 0; y < oldImg.Height; y++)
+			{
+				for (int x = 0; x < oldImg.Width; x++)
+				{
+					ref var oldPixel = ref oldImg[x, y];
+					ref var newPixel = ref newImg[x, y];
+
+					Assert.That(oldPixel.r == newPixel.r, Is.True);
+					Assert.That(oldPixel.g == newPixel.g, Is.True);
+					Assert.That(oldPixel.b == newPixel.b, Is.True);
+					Assert.That(oldPixel.a == newPixel.a, Is.True);
+				}
+			}
+		}
+
+		static void AssertImage(Image<Rgb24> oldImg, Image<Rgb24> newImg)
+		{
+			for (int y = 0; y < oldImg.Height; y++)
+			{
+				for (int x = 0; x < oldImg.Width; x++)
+				{
+					ref var oldPixel = ref oldImg[x, y];
+					ref var newPixel = ref newImg[x, y];
+
+					Assert.That(oldPixel.r == newPixel.r, Is.True);
+					Assert.That(oldPixel.g == newPixel.g, Is.True);
+					Assert.That(oldPixel.b == newPixel.b, Is.True);
+				}
+			}
+		}
+
+		static void AssertImage(Image<Rgb24> oldImg, Image<Rgba32> newImg)
+			=> AssertImage(newImg, oldImg);
+
+		static void AssertImage(Image<Rgba32> oldImg, Image<Rgb24> newImg)
+		{
+			for (int y = 0; y < oldImg.Height; y++)
+			{
+				for (int x = 0; x < oldImg.Width; x++)
+				{
+					ref var oldPixel = ref oldImg[x, y];
+					ref var newPixel = ref newImg[x, y];
+
+					Assert.That(oldPixel.r == newPixel.r, Is.True);
+					Assert.That(oldPixel.g == newPixel.g, Is.True);
+					Assert.That(oldPixel.b == newPixel.b, Is.True);
+				}
+			}
+		}
+
+		static void AssertImage(Image<Rgba64> oldImg, Image<Rgb24> newImg)
+		{
+			for (int y = 0; y < oldImg.Height; y++)
+			{
+				for (int x = 0; x < oldImg.Width; x++)
+				{
+					ref var oldPixel = ref oldImg[x, y];
+					ref var newPixel = ref newImg[x, y];
+
+					Assert.That(oldPixel.r == newPixel.r, Is.True);
+					Assert.That(oldPixel.g == newPixel.g, Is.True);
+					Assert.That(oldPixel.b == newPixel.b, Is.True);
+				}
+			}
+		}
+
+		static void AssertImage(Image<Rgba64> oldImg, Image<Rgb48> newImg)
+		{
+			for (int y = 0; y < oldImg.Height; y++)
+			{
+				for (int x = 0; x < oldImg.Width; x++)
+				{
+					ref var oldPixel = ref oldImg[x, y];
+					ref var newPixel = ref newImg[x, y];
+
+					Assert.That(oldPixel.r == newPixel.r, Is.True);
+					Assert.That(oldPixel.g == newPixel.g, Is.True);
+					Assert.That(oldPixel.b == newPixel.b, Is.True);
+				}
+			}
+		}
+
+		static void AssertPixel(ref readonly Rgba64 pixel1, ref readonly Rgba64 pixel2)
+		{
+			Assert.That(pixel1.r == pixel2.r, Is.True);
+			Assert.That(pixel1.g == pixel2.g, Is.True);
+			Assert.That(pixel1.b == pixel2.b, Is.True);
+			Assert.That(pixel1.a == pixel2.a, Is.True);
+		}
+	}
+
+	static class TestHelpers
+	{
+		public static void TestFormat<TPixel, TConfig>(scoped ReadOnlySpan<byte> imgData, Action<Image<TPixel>, Image<TPixel>> assert) where TPixel : unmanaged, IPixel<TPixel> where TConfig : struct, IFormatConfig<TConfig>
+			=> TestFormat<TPixel, TPixel, TConfig>(imgData, assert);
+
+		public static void TestFormat<TReadPixel, TWritePixel, TConfig>(scoped ReadOnlySpan<byte> imgData, Action<Image<TReadPixel>, Image<TWritePixel>> assert)
+			where TReadPixel : unmanaged, IPixel<TReadPixel>
+			where TWritePixel : unmanaged, IPixel<TWritePixel>
+			where TConfig : struct, IFormatConfig<TConfig>
+		{
+			var img = Image.Load<TReadPixel, TConfig>(imgData);
+
+			int bytePerPixel = TWritePixel.Channels * (TWritePixel.BitDepth / 8);
+
+			using var tmpImg = MemoryPool<byte>.Shared.Rent(bytePerPixel * img.Width * img.Height * 2);
+			Image.Save(tmpImg.Memory.Span, img.Span, TConfig.FromPixel<TWritePixel>());
+
+			var newImg = Image.Load<TWritePixel, TConfig>(tmpImg.Memory.Span);
+
+			assert(img, newImg);
+		}
+
+		public static void TestFormatLoad<TReadPixel, TConfig>(scoped ReadOnlySpan<byte> imgData, Action<Image<TReadPixel>> assert)
+			where TReadPixel : unmanaged, IPixel<TReadPixel>
+			where TConfig : struct, IFormatConfig<TConfig>
+		{
+			var img = Image.Load<TReadPixel, TConfig>(imgData);
+
+			assert(img);
+		}
+	}
+}
