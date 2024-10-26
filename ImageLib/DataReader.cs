@@ -54,6 +54,9 @@ namespace ImageLib
 		public int Read(scoped Span<byte> buffer)
 			=> reader.Read(buffer);
 
+		public int Read(scoped Span<char> buffer)
+			=> reader.Read(buffer);
+
 		public int ReadUntill(scoped SpanList<byte> buffer, byte endByte)
 		{
 			byte c;

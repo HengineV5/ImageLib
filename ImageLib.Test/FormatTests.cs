@@ -3,14 +3,9 @@ using ImageLib.Hdr;
 using MathLib;
 using System.Buffers;
 
-using Rgba32 = MathLib.Rgba<MathLib.UInt8, MathLib.Rgba_Ops_Generic<MathLib.UInt8>>;
-using Rgba64 = MathLib.Rgba<MathLib.UInt16, MathLib.Rgba_Ops_Generic<MathLib.UInt16>>;
-using Rgb24 = MathLib.Rgb<MathLib.UInt8, MathLib.Rgb_Ops_Generic<MathLib.UInt8>>;
-using Rgb48 = MathLib.Rgb<MathLib.UInt16, MathLib.Rgb_Ops_Generic<MathLib.UInt16>>;
-
 namespace ImageLib.Test
 {
-	public class Tests
+	public class FormatTests
 	{
 		Memory<byte> img_png_rgba32;
 		Memory<byte> img_png_rgb24;

@@ -3,8 +3,12 @@ using MathLib;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.IO.Compression;
+using System.IO.Pipelines;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using System.Text;
 using System.Xml.Linq;
 using ZlibNGSharpMinimal.Deflate;
@@ -173,11 +177,11 @@ namespace ImageLib.Png
 			return Image.CreateEmpty<TPixel>((int)ihdr.width, (int)ihdr.height);
 		}
 
-		static void ProcessData<TPixel>(ref readonly PngIHDR ihdr, scoped ReadOnlySpan<byte> data, scoped ImageSpan<TPixel> img) where TPixel : unmanaged, IPixel<TPixel>
+		static unsafe void ProcessData<TPixel>(ref readonly PngIHDR ihdr, scoped ReadOnlySpan<byte> data, scoped ImageSpan<TPixel> img) where TPixel : unmanaged, IPixel<TPixel>
 		{
 			Span<byte> imgBytes = MemoryMarshal.Cast<TPixel, byte>(img.data);
 
-			PixelFormat inputFormat = new(PngHelpers.GetPixelChannels(ihdr.colorType), ihdr.bitDepth / 8);
+			PixelFormat inputFormat = new(ScalarType.Integer, PngHelpers.GetPixelChannels(ihdr.colorType), ihdr.bitDepth / 8);
 
 			int bytesPerPixel = inputFormat.channels * inputFormat.bytesPerChannel;
 			int stride = (int)ihdr.width * bytesPerPixel + 1;
@@ -189,54 +193,257 @@ namespace ImageLib.Png
 
 			Span<byte> tmpPixel = stackalloc byte[bytesPerPixel];
 
+			fixed(byte* dataPtr = data)
+			fixed(byte* imgBytesPtr = imgBytes)
+			{
+				for (int scanline = 0; scanline < ihdr.height; scanline++)
+				{
+					int scanlineStart = scanline * stride;
+					byte filterType = dataPtr[scanlineStart];
+
+					if (filterType < 0 || filterType > 4)
+						throw new Exception($"Unknown filter type {filterType}");
+
+					for (int pixel = 0; pixel < ihdr.width; pixel++)
+					{
+						for (int x = 0; x < bytesPerPixel; x++)
+						{
+							byte xByte = dataPtr[scanline * stride + 1 + (pixel * bytesPerPixel) + x]; // First byte of each scanline is filter type
+
+							tmpPixel[x] = xByte;
+
+							int imgByteOffset = x * bytePerPixelRatio + pixel * imgBytesPerPixel;
+							switch (filterType)
+							{
+								case 1: // Sub
+									tmpPixel[x] += GetPixelByte(imgBytesPtr, imgStride, imgByteOffset - imgBytesPerPixel, scanline);
+									break;
+								case 2: // Up
+									tmpPixel[x] += GetPixelByte(imgBytesPtr, imgStride, imgByteOffset, scanline - 1);
+									break;
+								case 3: // Avg
+									tmpPixel[x] += (byte)((GetPixelByte(imgBytesPtr, imgStride, imgByteOffset - imgBytesPerPixel, scanline) + GetPixelByte(imgBytes, imgStride, imgByteOffset, scanline - 1)) / 2);
+									break;
+								case 4: // Paeth
+									byte a = GetPixelByte(imgBytesPtr, imgStride, imgByteOffset - imgBytesPerPixel, scanline);
+									byte b = GetPixelByte(imgBytesPtr, imgStride, imgByteOffset, scanline - 1);
+									byte c = GetPixelByte(imgBytesPtr, imgStride, imgByteOffset - imgBytesPerPixel, scanline - 1);
+
+									tmpPixel[x] += PngHelpers.PaethPredictor(a, b, c);
+									break;
+								default:
+									break;
+							}
+						}
+
+						PixelOperations.Read(ref img[pixel, scanline], in inputFormat, tmpPixel);
+					}
+				}
+			}
+		}
+
+		static unsafe void ProcessDataO<TPixel>(ref readonly PngIHDR ihdr, scoped ReadOnlySpan<byte> data, scoped ImageSpan<TPixel> img) where TPixel : unmanaged, IPixel<TPixel>
+		{
+			Span<byte> imgBytes = MemoryMarshal.Cast<TPixel, byte>(img.data);
+
+			PixelFormat inputFormat = new(ScalarType.Integer, PngHelpers.GetPixelChannels(ihdr.colorType), ihdr.bitDepth / 8);
+
+			int bytesPerPixel = inputFormat.channels * inputFormat.bytesPerChannel;
+			int stride = (int)ihdr.width * bytesPerPixel + 1;
+
+			int imgBytesPerPixel = TPixel.Channels * (TPixel.BitDepth / 8);
+			int imgStride = (int)ihdr.width * imgBytesPerPixel;
+
+			int bytePerPixelRatio = imgBytesPerPixel / bytesPerPixel; // This will break if TPixel bitdepth is smnaller than source image bitdepth
+
+			using var scanlineMem1 = MemoryPool<byte>.Shared.Rent(stride - 1);
+			using var scanlineMem2 = MemoryPool<byte>.Shared.Rent(stride - 1);
+
+			bool inverted = false;
+			Span<byte> scanlineCurr = scanlineMem1.Memory.Span.Slice(0, stride - 1);
+			Span<byte> scanlinePrev = scanlineMem2.Memory.Span.Slice(0, stride - 1);
+
 			for (int scanline = 0; scanline < ihdr.height; scanline++)
 			{
 				int scanlineStart = scanline * stride;
 				byte filterType = data[scanlineStart];
 
-				if (filterType < 0 || filterType > 4)
-					throw new Exception($"Unknown filter type {filterType}");
+				data.Slice(scanline * stride + 1, stride - 1).TryCopyTo(scanlineCurr);
+
+				switch (filterType)
+				{
+					case 1: // Sub
+						ProcessSubScanline(scanlineCurr);
+						break;
+					case 2: // Up
+						ProcessUpScanline(scanlineCurr, scanlinePrev);
+						break;
+					case 3: // Avg
+						ProcessAvgScanline(scanlineCurr, scanlinePrev);
+						break;
+					case 4: // Paeth
+						ProcessPaethScanline(scanlineCurr, scanlinePrev);
+						break;
+					default:
+						throw new Exception($"Unknown filter type {filterType}");
+				}
 
 				for (int pixel = 0; pixel < ihdr.width; pixel++)
 				{
-					for (int x = 0; x < bytesPerPixel; x++)
-					{
-						byte xByte = data[scanline * stride + 1 + (pixel * bytesPerPixel) + x]; // First byte of each scanline is filter type
-
-						tmpPixel[x] = xByte;
-
-						int imgByteOffset = x * bytePerPixelRatio + pixel * imgBytesPerPixel;
-						switch (filterType)
-						{
-							case 1:
-								tmpPixel[x] += GetPixelByte(imgBytes, imgStride, imgByteOffset - imgBytesPerPixel, scanline);
-								break;
-							case 2:
-								tmpPixel[x] += GetPixelByte(imgBytes, imgStride, imgByteOffset, scanline - 1);
-								break;
-							case 3:
-								tmpPixel[x] += (byte)((GetPixelByte(imgBytes, imgStride, imgByteOffset - imgBytesPerPixel, scanline) + GetPixelByte(imgBytes, imgStride, imgByteOffset, scanline - 1)) / 2);
-								break;
-							case 4:
-								byte a = GetPixelByte(imgBytes, imgStride, imgByteOffset - imgBytesPerPixel, scanline);
-								byte b = GetPixelByte(imgBytes, imgStride, imgByteOffset, scanline - 1);
-								byte c = GetPixelByte(imgBytes, imgStride, imgByteOffset - imgBytesPerPixel, scanline - 1);
-
-								tmpPixel[x] += PngHelpers.PaethPredictor(a, b, c);
-								break;
-							default:
-								break;
-						}
-					}
-
-					TPixel.Read(ref img[pixel, scanline], in inputFormat, tmpPixel);
+					PixelOperations.Read(ref img[pixel, scanline], in inputFormat, data.Slice(scanline * stride + 1 + (pixel * bytesPerPixel)));
 				}
 			}
 		}
 
+		// Current assumptions:
+		//  4 bytes per pixel
+		//  Scanline has been filled with data
+		static void ProcessSubScanline(scoped Span<byte> scanlineCurr)
+		{
+			Vector64<byte> vecPrev = Vector64<byte>.Zero;
+			Vector64<byte> vecCurr = Vector64<byte>.Zero;
+
+			for (int i = 4; i < scanlineCurr.Length; i += 4)
+			{
+				vecPrev = Vector64.LoadUnsafe(ref scanlineCurr[i - 4]);
+				vecCurr = Vector64.LoadUnsafe(ref scanlineCurr[i]);
+
+				vecPrev = Vector64.Add(vecPrev, vecCurr);
+
+				scanlineCurr[i] = vecPrev[0];
+				scanlineCurr[i + 1] = vecPrev[1];
+				scanlineCurr[i + 2] = vecPrev[2];
+				scanlineCurr[i + 3] = vecPrev[3];
+			}
+		}
+
+		// Current assumptions:
+		//  4 bytes per pixel
+		//  Scanline has been filled with data
+		static void ProcessUpScanline(scoped Span<byte> scanlineCurr, scoped Span<byte> scanlinePrev)
+		{
+			Vector64<byte> vecPrev = Vector64<byte>.Zero;
+			Vector64<byte> vecUp = Vector64<byte>.Zero;
+
+			for (int i = 0; i < scanlineCurr.Length; i += 4)
+			{
+				vecPrev = Vector64.LoadUnsafe(ref scanlinePrev[i]);
+				vecUp = Vector64.LoadUnsafe(ref scanlineCurr[i]);
+
+				vecPrev = Vector64.Add(vecPrev, vecUp);
+
+				scanlineCurr[i] = vecPrev[0];
+				scanlineCurr[i + 1] = vecPrev[1];
+				scanlineCurr[i + 2] = vecPrev[2];
+				scanlineCurr[i + 3] = vecPrev[3];
+			}
+		}
+
+		// Current assumptions:
+		//  4 bytes per pixel
+		//  Scanline has been filled with data
+		static void ProcessAvgScanline(scoped Span<byte> scanlineCurr, scoped Span<byte> scanlinePrev)
+		{
+			Vector64<byte> vecPrev = Vector64<byte>.Zero;
+			Vector64<byte> vecUp = Vector64<byte>.Zero;
+			Vector64<byte> vecCurr = Vector64<byte>.Zero;
+
+			for (int i = 0; i < 4; i += 4)
+			{
+				vecUp = Vector64.LoadUnsafe(ref scanlinePrev[i]);
+				vecCurr = Vector64.LoadUnsafe(ref scanlineCurr[i]);
+
+				vecUp = Vector64.Add(Vector64.Divide(vecUp, (byte)2), vecCurr);
+
+				scanlineCurr[i] = vecUp[0];
+				scanlineCurr[i + 1] = vecUp[1];
+				scanlineCurr[i + 2] = vecUp[2];
+				scanlineCurr[i + 3] = vecUp[3];
+			}
+
+			for (int i = 4; i < scanlineCurr.Length; i += 4)
+			{
+				vecUp = Vector64.LoadUnsafe(ref scanlinePrev[i]);
+				vecPrev = Vector64.LoadUnsafe(ref scanlineCurr[i - 4]);
+				vecCurr = Vector64.LoadUnsafe(ref scanlineCurr[i]);
+
+				vecUp = Vector64.Add(Vector64.Divide(Vector64.Add(vecUp, vecPrev), (byte)2), vecCurr);
+
+				scanlineCurr[i] = vecUp[0];
+				scanlineCurr[i + 1] = vecUp[1];
+				scanlineCurr[i + 2] = vecUp[2];
+				scanlineCurr[i + 3] = vecUp[3];
+			}
+		}
+
+		// Current assumptions:
+		//  4 bytes per pixel
+		//  Scanline has been filled with data
+		static unsafe void ProcessPaethScanline(scoped Span<byte> scanlineCurr, scoped Span<byte> scanlinePrev)
+		{
+			fixed(byte* scanlineCurrPtr = scanlineCurr)
+			fixed(byte* scanlinePrevPtr = scanlinePrev)
+			{
+				for (int i = 4; i < scanlineCurr.Length; i += 4)
+				{
+					Vector128<short>  ass = Vector128.Create(scanlineCurrPtr[i - 4], scanlineCurrPtr[i - 4 + 1], scanlineCurrPtr[i - 4 + 2], scanlineCurrPtr[i - 4 + 3], 0, 0, 0, 0);
+					Vector128<short>  bs = Vector128.Create(scanlinePrevPtr[i], scanlinePrevPtr[i + 1], scanlinePrevPtr[i + 2], scanlinePrevPtr[i + 3], 0, 0, 0, 0);
+					Vector128<short>  cs = Vector128.Create(scanlinePrevPtr[i - 4], scanlinePrevPtr[i - 4 + 1], scanlinePrevPtr[i - 4 + 2], scanlinePrevPtr[i - 4 + 3], 0, 0, 0, 0);
+
+					Vector128<ushort> pa = Ssse3.Abs(Ssse3.Subtract(bs, cs));
+					Vector128<ushort> pb = Ssse3.Abs(Ssse3.Subtract(ass, cs));
+					Vector128<ushort> pc = Ssse3.Abs(Ssse3.Subtract(Ssse3.Subtract(Ssse3.Add(ass, bs), cs), cs));
+
+					Avx.BlendVariable(bs, cs, Vector128.As<ushort, short>(Vector128.LessThanOrEqual(pb, pc)));
+					//	Vector128.ConditionalSelect(Vector128.As<ushort, short>(Vector128.LessThanOrEqual(pb, pc)), bs, cs)
+					
+					//Vector128<short> result = Vector128.ConditionalSelect(Vector128.As<ushort, short>(Vector128.BitwiseAnd(Vector128.LessThanOrEqual(pa, pb), Vector128.LessThanOrEqual(pa, pc))), ass, Vector128.ConditionalSelect(Vector128.As<ushort, short>(Vector128.LessThanOrEqual(pb, pc)), bs, cs));
+					Vector128<short> result = Avx.BlendVariable(ass, Avx.BlendVariable(bs, cs, Vector128.As<ushort, short>(Vector128.LessThanOrEqual(pb, pc))), Vector128.As<ushort, short>(Vector128.BitwiseAnd(Vector128.LessThanOrEqual(pa, pb), Vector128.LessThanOrEqual(pa, pc))));
+
+					scanlineCurrPtr[i] = (byte)result[0];
+					scanlineCurrPtr[i + 1] = (byte)result[1];
+					scanlineCurrPtr[i + 2] = (byte)result[2];
+					scanlineCurrPtr[i + 3] = (byte)result[3];
+				}
+			}
+		}
+
+		/*
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static byte PaethPredictor(byte a, byte b, byte c)
+		{
+			Vector128<int> vec = Vector128.Abs(Vector128.Create(b - c, a - c, a + b - 2 * c, 0));
+
+			if (vec[0] <= vec[1] && vec[0] <= vec[2])
+				return a;
+
+			if (vec[1] <= vec[2])
+				return b;
+
+			return c;
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static byte PaethPredictor(byte a, byte b, byte c)
+		{
+			int p = a + b - c;
+			int pa = int.Abs(p - a);
+			int pb = int.Abs(p - b);
+			int pc = int.Abs(p - c);
+
+			if (pa <= pb && pa <= pc)
+				return a;
+
+			if (pb <= pc)
+				return b;
+
+			return c;
+		}
+		*/
+
 		static void FilterImage<TPixel>(ref readonly PngIHDR ihdr, scoped ImageSpan<TPixel> img, scoped Span<byte> output) where TPixel : unmanaged, IPixel<TPixel>
 		{
-			PixelFormat outputFormat = new(PngHelpers.GetPixelChannels(ihdr.colorType), ihdr.bitDepth / 8);
+			PixelFormat outputFormat = new(ScalarType.Integer, PngHelpers.GetPixelChannels(ihdr.colorType), ihdr.bitDepth / 8);
 			int bytesPerPixel = outputFormat.channels * outputFormat.bytesPerChannel;
 			int stride = img.width * bytesPerPixel;
 
@@ -247,7 +454,7 @@ namespace ImageLib.Png
 
 				for (int x = 0; x < imgScanline.Length; x++)
 				{
-					TPixel.Write(in imgScanline[x], in outputFormat, outputScanline.Slice(x * bytesPerPixel, bytesPerPixel));
+					PixelOperations.Write(in imgScanline[x], in outputFormat, outputScanline.Slice(x * bytesPerPixel, bytesPerPixel));
 				}
 			}
 
@@ -298,9 +505,7 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 		static unsafe byte GetPixelByte(scoped Span<byte> data, int stride, int x, int y, int xOffset = 0)
 		{
 			ref var dataRef = ref MemoryMarshal.AsRef<byte>(data);
-			return Unsafe.Add(ref dataRef, y * stride + x + xOffset);
-
-			//return x < 0 || y < 0 ? (byte)0 : data[y * stride + x + xOffset];
+			return x < 0 || y < 0 ? (byte)0 : Unsafe.Add(ref dataRef, y * stride + x + xOffset);
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -357,9 +562,7 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 		{
 			SpanList<byte> data = stackalloc byte[13];
 			data.Add(BitConverter.GetBytes(BinaryPrimitives.ReverseEndianness(ihdr.width)));
-			//data.Add(BitConverter.GetBytes(ihdr.width));
 			data.Add(BitConverter.GetBytes(BinaryPrimitives.ReverseEndianness(ihdr.height)));
-			//data.Add(BitConverter.GetBytes(ihdr.height));
 			data.Add(ihdr.bitDepth);
 			data.Add(ihdr.colorType);
 			data.Add(ihdr.compressionMethod);
@@ -371,7 +574,6 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 
 		static int read = 0;
 
-		//public static PngIDAT ReadIDAT(ref readonly PngChunkHeader header, DataReader reader, ZLib zLib, ref ZStream zStream)
 		public static PngIDAT ReadIDAT(ref readonly PngChunkHeader header, DataReader reader, ref SpanList<byte> data)
 		{
 			reader.Read(data.Allocate((int)header.length));
@@ -462,6 +664,22 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 			}
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static byte PaethPredictor(byte a, byte b, byte c)
+		{
+			Vector128<int> vec = Vector128.Abs(Vector128.Create(b - c, a - c, a + b - 2 * c, 0));
+
+			if (vec[0] <= vec[1] && vec[0] <= vec[2])
+				return a;
+
+			if (vec[1] <= vec[2])
+				return b;
+
+			return c;
+		}
+
+		/*
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static byte PaethPredictor(byte a, byte b, byte c)
 		{
 			int p = a + b - c;
@@ -477,6 +695,7 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 
 			return c;
 		}
+		*/
 
 		public static byte ReconstructSub(byte x, byte a)
 		{

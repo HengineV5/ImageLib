@@ -44,7 +44,7 @@ namespace ImageLib.Hdr
 
 			IMemoryOwner<byte> row = MemoryPool<byte>.Shared.Rent(header.width * 4);
 
-			PixelFormat pixelFormat = new(4, 2);
+			PixelFormat pixelFormat = new(ScalarType.Integer, 4, 2); // TODO: Change this to floating
 			for (int scanline = 0; scanline < header.height; scanline++)
 			{
 				stream.Read(rgbeBuff);
@@ -73,7 +73,7 @@ namespace ImageLib.Hdr
 					BitConverter.TryWriteBytes(pixelBuff.Slice(2, 2), (ushort)MathF.Min(65535, g * ushort.MaxValue));
 					BitConverter.TryWriteBytes(pixelBuff.Slice(4, 2), (ushort)MathF.Min(65535, b * ushort.MaxValue));
 
-					TPixel.Read(ref image[pixel, scanline], in pixelFormat, pixelBuff);
+					PixelOperations.Read(ref image[pixel, scanline], in pixelFormat, pixelBuff);
 				}
 			}
 		}
@@ -187,7 +187,7 @@ namespace ImageLib.Hdr
 			Span<byte> floatPixelBuff = stackalloc byte[4];
 			Span<byte> pixelBuff = stackalloc byte[4];
 
-			PixelFormat pixelFormat = new(4, 2);
+			PixelFormat pixelFormat = new(ScalarType.Integer, 4, 2); // TODO: Change to float
 			for (int y = 0; y < height; y++)
 			{
 				for (int x = 0; x < width; x++)
@@ -197,7 +197,7 @@ namespace ImageLib.Hdr
 					if (floatPixelBuff[3] == 0)
 					{
 						pixelBuff.Clear();
-						TPixel.Read(ref img[x, y], in pixelFormat, pixelBuff);
+						PixelOperations.Read(ref img[x, y], in pixelFormat, pixelBuff);
 						continue;
 					}
 
@@ -210,7 +210,7 @@ namespace ImageLib.Hdr
 					BitConverter.TryWriteBytes(pixelBuff.Slice(2, 1), (ushort)MathF.Min(65535, g * ushort.MaxValue));
 					BitConverter.TryWriteBytes(pixelBuff.Slice(4, 1), (ushort)MathF.Min(65535, b * ushort.MaxValue));
 
-					TPixel.Read(ref img[x, y], in pixelFormat, pixelBuff);
+					PixelOperations.Read(ref img[x, y], in pixelFormat, pixelBuff);
 				}
 			}
 

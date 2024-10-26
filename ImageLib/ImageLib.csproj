@@ -9,8 +9,8 @@
 
   <ItemGroup>
     <PackageReference Include="carlst99.ZlibNGSharp" Version="1.2.0" />
-    <PackageReference Include="MathLib" Version="0.0.10" />
-    <PackageReference Include="MathLib.Imaging" Version="0.0.10" />
+    <PackageReference Include="MathLib" Version="0.0.13" />
+    <PackageReference Include="MathLib.Imaging" Version="0.0.13" />
   </ItemGroup>
 
   <ItemGroup>
