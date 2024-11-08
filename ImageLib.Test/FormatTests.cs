@@ -47,7 +47,7 @@ namespace ImageLib.Test
 			});
 		}
 
-		static void AssertImage(Image<Rgba32> oldImg, Image<Rgba32> newImg)
+		static void AssertImage(ImageMemory<Rgba32> oldImg, ImageMemory<Rgba32> newImg)
 		{
 			for (int y = 0; y < oldImg.Height; y++)
 			{
@@ -64,7 +64,7 @@ namespace ImageLib.Test
 			}
 		}
 
-		static void AssertImage(Image<Rgba64> oldImg, Image<Rgba64> newImg)
+		static void AssertImage(ImageMemory<Rgba64> oldImg, ImageMemory<Rgba64> newImg)
 		{
 			for (int y = 0; y < oldImg.Height; y++)
 			{
@@ -81,7 +81,7 @@ namespace ImageLib.Test
 			}
 		}
 
-		static void AssertImage(Image<Rgb24> oldImg, Image<Rgb24> newImg)
+		static void AssertImage(ImageMemory<Rgb24> oldImg, ImageMemory<Rgb24> newImg)
 		{
 			for (int y = 0; y < oldImg.Height; y++)
 			{
@@ -97,10 +97,10 @@ namespace ImageLib.Test
 			}
 		}
 
-		static void AssertImage(Image<Rgb24> oldImg, Image<Rgba32> newImg)
+		static void AssertImage(ImageMemory<Rgb24> oldImg, ImageMemory<Rgba32> newImg)
 			=> AssertImage(newImg, oldImg);
 
-		static void AssertImage(Image<Rgba32> oldImg, Image<Rgb24> newImg)
+		static void AssertImage(ImageMemory<Rgba32> oldImg, ImageMemory<Rgb24> newImg)
 		{
 			for (int y = 0; y < oldImg.Height; y++)
 			{
@@ -116,7 +116,7 @@ namespace ImageLib.Test
 			}
 		}
 
-		static void AssertImage(Image<Rgba64> oldImg, Image<Rgb24> newImg)
+		static void AssertImage(ImageMemory<Rgba64> oldImg, ImageMemory<Rgb24> newImg)
 		{
 			for (int y = 0; y < oldImg.Height; y++)
 			{
@@ -132,7 +132,7 @@ namespace ImageLib.Test
 			}
 		}
 
-		static void AssertImage(Image<Rgba64> oldImg, Image<Rgb48> newImg)
+		static void AssertImage(ImageMemory<Rgba64> oldImg, ImageMemory<Rgb48> newImg)
 		{
 			for (int y = 0; y < oldImg.Height; y++)
 			{
@@ -159,10 +159,10 @@ namespace ImageLib.Test
 
 	static class TestHelpers
 	{
-		public static void TestFormat<TPixel, TConfig>(scoped ReadOnlySpan<byte> imgData, Action<Image<TPixel>, Image<TPixel>> assert) where TPixel : unmanaged, IPixel<TPixel> where TConfig : struct, IFormatConfig<TConfig>
+		public static void TestFormat<TPixel, TConfig>(scoped ReadOnlySpan<byte> imgData, Action<ImageMemory<TPixel>, ImageMemory<TPixel>> assert) where TPixel : unmanaged, IPixel<TPixel> where TConfig : struct, IFormatConfig<TConfig>
 			=> TestFormat<TPixel, TPixel, TConfig>(imgData, assert);
 
-		public static void TestFormat<TReadPixel, TWritePixel, TConfig>(scoped ReadOnlySpan<byte> imgData, Action<Image<TReadPixel>, Image<TWritePixel>> assert)
+		public static void TestFormat<TReadPixel, TWritePixel, TConfig>(scoped ReadOnlySpan<byte> imgData, Action<ImageMemory<TReadPixel>, ImageMemory<TWritePixel>> assert)
 			where TReadPixel : unmanaged, IPixel<TReadPixel>
 			where TWritePixel : unmanaged, IPixel<TWritePixel>
 			where TConfig : struct, IFormatConfig<TConfig>
@@ -179,7 +179,7 @@ namespace ImageLib.Test
 			assert(img, newImg);
 		}
 
-		public static void TestFormatLoad<TReadPixel, TConfig>(scoped ReadOnlySpan<byte> imgData, Action<Image<TReadPixel>> assert)
+		public static void TestFormatLoad<TReadPixel, TConfig>(scoped ReadOnlySpan<byte> imgData, Action<ImageMemory<TReadPixel>> assert)
 			where TReadPixel : unmanaged, IPixel<TReadPixel>
 			where TConfig : struct, IFormatConfig<TConfig>
 		{

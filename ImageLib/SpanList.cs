@@ -76,7 +76,6 @@
 		public ReadOnlySpan<T> AsSpan()
 			=> span.Slice(0, Count);
 
-		public static implicit operator SpanList<T>(Span<T> span)
-			=> new(span);
+		public static implicit operator SpanList<T>(Span<T> span) => new(span);
 	}
 }

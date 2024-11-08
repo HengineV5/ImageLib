@@ -17,6 +17,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Images\Exr\AllHalfValues.exr">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Images\Exr\Sample.exr">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Images\Exr\Test.exr">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

@@ -4,7 +4,7 @@
 	{
 		None = 0,
 		Rle = 1,
-		Zipz = 2,
+		Zips = 2,
 		Zip = 3,
 		Piz = 4,
 		Pxr24 = 5,

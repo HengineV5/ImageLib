@@ -33,7 +33,7 @@ namespace ImageLib
 				return;
 			}
 
-			if (inputFormat.type == outputFormat.type && inputFormat.type == ScalarType.Integer)
+			if (outputFormat.type == ScalarType.Integer && inputFormat.type == ScalarType.Integer)
 			{
 				int channelsToWrite = int.Min(outputFormat.channels, inputFormat.channels);
 				if (outputFormat.bytesPerChannel == inputFormat.bytesPerChannel)
@@ -54,6 +54,22 @@ namespace ImageLib
 						//ScaleChannel(outputFormat.bytesPerChannel - bytesPerChannel, ref MemoryMarshal.AsRef<long>(tmpChannel));
 						tmpChannel.Slice(0, outputFormat.bytesPerChannel).TryCopyTo(output.Slice(i * outputFormat.bytesPerChannel, outputFormat.bytesPerChannel));
 					}
+				}
+			}
+			else if (outputFormat.type == ScalarType.Floating && inputFormat.type == ScalarType.Floating)
+			{
+				int channelsToWrite = int.Min(outputFormat.channels, inputFormat.channels);
+				if (outputFormat.bytesPerChannel == inputFormat.bytesPerChannel)
+				{
+					for (int i = 0; i < channelsToWrite; i++)
+					{
+						input.Slice(i * inputFormat.bytesPerChannel, inputFormat.bytesPerChannel).TryCopyTo(output.Slice(i * outputFormat.bytesPerChannel, outputFormat.bytesPerChannel));
+					}
+				}
+				else
+				{
+					int maxBytesPerChannel = int.Max(inputFormat.bytesPerChannel, outputFormat.bytesPerChannel);
+					Span<byte> tmpChannel = stackalloc byte[maxBytesPerChannel];
 				}
 			}
 			else

@@ -180,7 +180,7 @@ namespace ImageLib.Hdr
 			}
 		}
 
-		Image<TPixel> ReadFlat<TPixel>(Stream stream, int width, int height) where TPixel : unmanaged, IPixel<TPixel>
+		ImageMemory<TPixel> ReadFlat<TPixel>(Stream stream, int width, int height) where TPixel : unmanaged, IPixel<TPixel>
 		{
 			var img = Image.CreateEmpty<TPixel>(width, height);
 

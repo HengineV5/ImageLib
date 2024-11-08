@@ -1,5 +1,8 @@
 ﻿using Engine.Utils;
 using System.Buffers.Binary;
+using System.Reflection.PortableExecutable;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace ImageLib
 {
@@ -39,8 +42,14 @@ namespace ImageLib
 		public short ReadInt16()
 			=> invertEndianess ? BinaryPrimitives.ReverseEndianness(reader.ReadInt16()) : reader.ReadInt16();
 
+		public Half ReadHalf()
+			=> reader.ReadHalf();
+
 		public float ReadFloat()
 			=> reader.ReadSingle();
+
+		public double ReadDouble()
+			=> reader.ReadDouble();
 
 		public byte ReadByte()
 			=> reader.ReadByte();
@@ -77,5 +86,80 @@ namespace ImageLib
 		{
 			reader.BaseStream.Position = position;
 		}
+	}
+
+	public ref struct SpanDataReader
+	{
+		public int Remaining => data.Length - idx;
+
+		ReadOnlySpan<byte> data;
+		int idx = 0;
+		bool invertEndianess;
+
+		public SpanDataReader(ReadOnlySpan<byte> data, bool isLittleEndian = false)
+		{
+			this.data = data;
+			this.invertEndianess = isLittleEndian != BitConverter.IsLittleEndian; // If system and data endianess is mismatched invert endianess
+		}
+
+		public ulong ReadUInt64()
+			=> invertEndianess ? BinaryPrimitives.ReverseEndianness(Read<ulong>()) : Read<ulong>();
+
+		public long ReadInt64()
+			=> invertEndianess ? BinaryPrimitives.ReverseEndianness(Read<long>()) : Read<long>();
+
+		public uint ReadUInt32()
+			=> invertEndianess ? BinaryPrimitives.ReverseEndianness(Read<uint>()) : Read<uint>();
+
+		public int ReadInt32()
+			=> invertEndianess ? BinaryPrimitives.ReverseEndianness(Read<int>()) : Read<int>();
+
+		public ushort ReadUInt16()
+			=> invertEndianess ? BinaryPrimitives.ReverseEndianness(Read<ushort>()) : Read<ushort>();
+
+		public short ReadInt16()
+			=> invertEndianess ? BinaryPrimitives.ReverseEndianness(Read<short>()) : Read<short>();
+
+		public Half ReadHalf()
+			=> Read<Half>();
+
+		public float ReadFloat()
+			=> Read<float>();
+
+		public double ReadDouble()
+			=> Read<double>();
+
+		public byte ReadByte()
+			=> Read<byte>();
+
+		public char ReadChar()
+			=> Read<char>();
+
+		public sbyte ReadSByte()
+			=> Read<sbyte>();
+
+		public int Read(scoped Span<byte> buffer)
+		{
+			if (buffer.Length > data.Length - idx)
+			{
+				data.Slice(idx, data.Length - idx).TryCopyTo(buffer);
+				idx += data.Length - idx;
+				return data.Length - idx;
+			}
+			else
+			{
+				data.Slice(idx, buffer.Length).TryCopyTo(buffer);
+				idx += buffer.Length;
+				return buffer.Length;
+			}
+		}
+
+		unsafe T Read<T>() where T : unmanaged
+		{
+			idx += sizeof(T);
+			return MemoryMarshal.AsRef<T>(data.Slice(idx - sizeof(T), sizeof(T)));
+		}
+
+		public static implicit operator SpanDataReader(ReadOnlySpan<byte> span) => new(span);
 	}
 }

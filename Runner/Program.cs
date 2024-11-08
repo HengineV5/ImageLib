@@ -29,9 +29,10 @@ namespace Runner
 			//var img = Image.Load<Rgba64>("Images/Png/Test2.png");
 			//var img = Image.Load<Rgba64>("Images/Hdr/Test.hdr");
 			//var img = Image.Load<Rgba64>("Images/Hdr/Big.hdr");
-			var img = Image.Load<Rgb24>("Images/Png/PNG_test.png");
+			//var img = Image.Load<Rgb24>("Images/Png/PNG_test.png");
 			//var img = Image.Load<Rgb48>("Images/Png/Big.png");
-			//var img = Image.Load<Rgba32>("Images/Exr/Test.exr");
+			var img = Image.Load<Rgba32>("Images/Exr/AllHalfValues.exr");
+			//var img = Image.Load<Rgba32>("Images/Exr/Sample.exr");
 			//var img = Image.Load<Rgb24, PngConfig>(imgData);
 			/*
 			for (int x = 0; x < img.Width; x++)
@@ -46,13 +47,32 @@ namespace Runner
 			}
 			*/
 
-			//using var tmpImgData = MemoryPool<byte>.Shared.Rent(pngData.Length);
-
 			Console.WriteLine("Decoded");
 
+			/*
+			img.Span.FlipVertical();
+
+			var section = img.Span.Slice(100, 100, 500, 500);
+			var copy = img.Span.Slice(100, 100, 1000, 2000);
+			copy.Fill(new Rgb24(byte.MaxValue, 0, 0));
+			section.Fill(copy);
+			//section.Fill(new Rgb24(byte.MaxValue, 0, 0));
+			img.Span.FlipVertical();
+			img.Span.FlipHorizontal();
+			*/
+
+			//var mipmap = Image.CreateEmpty<Rgb24>(img.Width + img.Width / 2, img.Height);
+			//mipmap.Span.MipMap(img.Span);
+
+			//using var tmpImgData = MemoryPool<byte>.Shared.Rent(pngData.Length);
+
+			Console.WriteLine("Written");
+
 			//var img = Image.Load<Rgb32>("Test.png");
-			Image.Save("Test.png", img.Span, PngConfig.FromPixel<Rgb24>());
+			//Image.Save("Test.png", mipmap.Span, PngConfig.FromPixel<Rgb24>());
 			//Image.Save(tmpImgData.Memory.Span, img.Span, PngConfig.FromPixel<Rgba32>());
+
+			Console.WriteLine("Saved");
 
 			/*
 			int pixel = 0;

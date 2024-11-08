@@ -1,4 +1,5 @@
 ﻿using Engine.Utils;
+using ImageLib.Exr.Compression;
 using ImageLib.Hdr;
 using MathLib;
 using System;
@@ -54,8 +55,16 @@ namespace ImageLib.Exr
 
 			if (!version.isMultiPart)
 			{
-				// TODO
-				throw new Exception();
+				if (version.isSinglePart)
+					throw new Exception();
+
+				parts = new ExrPart[1];
+				parts.Span[0].header = ExrHelpers.ReadHeader(reader, version.hasLongNames);
+
+				var linesPerBlock = ExrHelpers.GetScanLinesPerBlock(parts.Span[0].header.compression);
+				var blockCount = (parts.Span[0].header.dataWindow.xMax - parts.Span[0].header.dataWindow.xMin) / linesPerBlock;
+
+				parts.Span[0].offsets = ExrHelpers.ReadOffsetTables(reader, blockCount);
 			}
 			else
 			{
@@ -83,12 +92,40 @@ namespace ImageLib.Exr
 				}
 			}
 
-			ulong partNumber = reader.ReadUInt32();
-			ulong partNumber2 = reader.ReadUInt32();
-			Console.WriteLine($"Part number: {partNumber}");
-			Console.WriteLine($"Part number2: {partNumber2}");
-			Console.WriteLine($"Ycoord: {reader.ReadInt32()}");
-			Console.WriteLine($"Pixel data size: {reader.ReadInt32()}");
+			/*
+			Console.WriteLine(parts.Span[0].header.compression);
+			Console.WriteLine(parts.Span[0].header.channels.Span[0].pixelType);
+			Console.WriteLine(parts.Span[0].header.type);
+			Console.WriteLine(reader.Position);
+			Console.WriteLine((long)parts.Span[0].offsets.Span[0]);
+			*/
+
+			reader.Seek((long)parts.Span[0].offsets.Span[0]);
+
+			if (version.isMultiPart)
+			{
+				ulong partNumber = reader.ReadUInt32(); // Seems to have swapped endian for some reason.
+				ulong partNumber2 = reader.ReadUInt32();
+				Console.WriteLine($"Part number: {partNumber}");
+				Console.WriteLine($"Part number2: {partNumber2}");
+			}
+
+			int scanline = reader.ReadInt32();
+			int dataSize = reader.ReadInt32();
+
+			Console.WriteLine($"startY: {scanline}");
+			Console.WriteLine($"data size: {dataSize}");
+
+			using var buffIn = MemoryPool<byte>.Shared.Rent(dataSize);
+			using var buffOut = MemoryPool<byte>.Shared.Rent(dataSize * 100);
+
+			var spanIn = buffIn.Memory.Span.Slice(0, dataSize);
+			var spanOut = buffOut.Memory.Span;
+
+			reader.Read(spanIn);
+			PIZ.Decompress(spanIn, spanOut);
+
+			//SpanDataReader spanReader = new(buffIn.Memory.Span.Slice(0, dataSize), true);
 		}
 
 		public void Encode<TPixel>(Stream stream, ImageSpan<TPixel> image, ref readonly ExrConfig config) where TPixel : unmanaged, IPixel<TPixel>
@@ -115,6 +152,25 @@ namespace ImageLib.Exr
 
 	static class ExrHelpers
 	{
+		public static int GetScanLinesPerBlock(ExrCompression compression)
+		{
+			switch (compression)
+			{
+				default:
+					return 1;
+				case ExrCompression.Zip:
+				case ExrCompression.Pxr24:
+					return 16;
+				case ExrCompression.Piz:
+				case ExrCompression.B44:
+				case ExrCompression.B44a:
+				case ExrCompression.Dwaa:
+					return 32;
+				case ExrCompression.Dwab:
+					return 256;
+			}
+		}
+
 		public static int ReadString(DataReader reader, scoped SpanList<byte> buff)
 		{
 			byte c = reader.ReadByte();
@@ -142,6 +198,9 @@ namespace ImageLib.Exr
 		public static string ReadInfiniteString(DataReader reader)
 		{
 			int strLength = reader.ReadInt32();
+			if (strLength == 0)
+				return string.Empty;
+
 			using var mem = MemoryPool<char>.Shared.Rent(strLength);
 
 			reader.Read(mem.Memory.Span.Slice(0, strLength));
@@ -263,7 +322,6 @@ namespace ImageLib.Exr
 							throw new Exception();
 
 						header.type = ExrHelpers.ReadInfiniteString(reader);
-						break;
 						break;
 					case var _ when strBuff.Slice(0, strLength).SequenceEqual("view"):
 						strLength = ExrHelpers.ReadString(reader, strBuff);

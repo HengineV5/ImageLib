@@ -76,7 +76,7 @@ namespace ImageLib
 		}
 
 		// TODO: The way metadata is gathered from files is a bit akward, can probably be done better.
-		public static Image<TPixel> Load<TPixel>(scoped ReadOnlySpan<char> path) where TPixel : unmanaged, IPixel<TPixel>
+		public static ImageMemory<TPixel> Load<TPixel>(scoped ReadOnlySpan<char> path) where TPixel : unmanaged, IPixel<TPixel>
 		{
 			using FileStream fs = new FileStream(path.ToString(), FileMode.Open, FileAccess.Read);
 			var ext = path.Slice(path.LastIndexOf('.'));
@@ -96,7 +96,7 @@ namespace ImageLib
 			FormatStorage.Decode(ext, fs, image);
 		}
 
-		public static Image<TPixel> Load<TPixel, TConfig>(scoped ReadOnlySpan<char> path) where TPixel : unmanaged, IPixel<TPixel> where TConfig : struct, IFormatConfig<TConfig>
+		public static ImageMemory<TPixel> Load<TPixel, TConfig>(scoped ReadOnlySpan<char> path) where TPixel : unmanaged, IPixel<TPixel> where TConfig : struct, IFormatConfig<TConfig>
 		{
 			using FileStream fs = new FileStream(path.ToString(), FileMode.Open, FileAccess.Read);
 
@@ -114,7 +114,7 @@ namespace ImageLib
 			FormatStorage<TConfig>.formatHandler.Decode(fs, image);
 		}
 		
-		public unsafe static Image<TPixel> Load<TPixel, TConfig>(scoped ReadOnlySpan<byte> data) where TPixel : unmanaged, IPixel<TPixel> where TConfig : struct, IFormatConfig<TConfig>
+		public unsafe static ImageMemory<TPixel> Load<TPixel, TConfig>(scoped ReadOnlySpan<byte> data) where TPixel : unmanaged, IPixel<TPixel> where TConfig : struct, IFormatConfig<TConfig>
 		{
 			fixed (byte* dataPtr = data)
 			{
@@ -161,15 +161,15 @@ namespace ImageLib
 			}
 		}
 
-		public static Image<TPixel> CreateEmpty<TPixel>(int width, int height) where TPixel : unmanaged, IPixel<TPixel>
+		public static ImageMemory<TPixel> CreateEmpty<TPixel>(int width, int height) where TPixel : unmanaged, IPixel<TPixel>
 		{
-			return new Image<TPixel>(new TPixel[width * height], width, height);
+			return new ImageMemory<TPixel>(new TPixel[width * height], width, height);
 		}
 	}
 
-	public class Image<TPixel> where TPixel : unmanaged, IPixel<TPixel>
+	public struct ImageMemory<TPixel> where TPixel : unmanaged, IPixel<TPixel>
 	{
-		public static readonly Image<TPixel> Empty = new(Memory<TPixel>.Empty, 0, 0);
+		public static readonly ImageMemory<TPixel> Empty = new(Memory<TPixel>.Empty, 0, 0);
 
 		public int Width { get; }
 
@@ -187,13 +187,13 @@ namespace ImageLib
 
 		Memory<TPixel> data;
 
-		internal Image(Memory<TPixel> data, int width, int height)
+		internal ImageMemory(Memory<TPixel> data, int width, int height)
 		{
 			this.data = data;
 			this.Width = width;
 			this.Height = height;
 		}
 
-		public static implicit operator ImageSpan<TPixel>(Image<TPixel> i) => i.Span;
+		public static implicit operator ImageSpan<TPixel>(ImageMemory<TPixel> i) => i.Span;
 	}
 }

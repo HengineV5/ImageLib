@@ -83,13 +83,13 @@ namespace ImageLib.Png
 					case "IHDR":
 						ihdr = PngHelpers.ReadIHDR(in header, reader);
 
-						if (image.width < ihdr.width || image.height < ihdr.height)
+						if (image.Width < ihdr.width || image.Height < ihdr.height)
 							throw new Exception("Provided image span is too small.");
 
 						if (TPixel.BitDepth < ihdr.bitDepth)
 							throw new Exception("Cannot load image into frame with a lower bitdepth."); // For future henke: See line 206
 
-						int imgByteSize = PngHelpers.GetPixelChannels(ihdr.colorType) * (ihdr.bitDepth / 8) * (image.width + 1) * image.height;
+						int imgByteSize = PngHelpers.GetPixelChannels(ihdr.colorType) * (ihdr.bitDepth / 8) * (image.Width + 1) * image.Height;
 						imgData = MemoryPool<byte>.Shared.Rent(imgByteSize); // TODO: This is probably overkill.
 						imgData.Memory.Span.Clear();
 
@@ -144,8 +144,8 @@ namespace ImageLib.Png
 
 			PngIHDR ihdr = new()
 			{
-				width = (uint)image.width,
-				height = (uint)image.height,
+				width = (uint)image.Width,
+				height = (uint)image.Height,
 				bitDepth = config.bitDepth,
 				colorType = config.colorType,
 				compressionMethod = config.compressionMethod,
@@ -172,14 +172,14 @@ namespace ImageLib.Png
 			PngHelpers.WriteIEND(writer);
 		}
 
-		static Image<TPixel> SetupImage<TPixel>(ref readonly PngIHDR ihdr) where TPixel : unmanaged, IPixel<TPixel>
+		static ImageMemory<TPixel> SetupImage<TPixel>(ref readonly PngIHDR ihdr) where TPixel : unmanaged, IPixel<TPixel>
 		{
 			return Image.CreateEmpty<TPixel>((int)ihdr.width, (int)ihdr.height);
 		}
 
 		static unsafe void ProcessData<TPixel>(ref readonly PngIHDR ihdr, scoped ReadOnlySpan<byte> data, scoped ImageSpan<TPixel> img) where TPixel : unmanaged, IPixel<TPixel>
 		{
-			Span<byte> imgBytes = MemoryMarshal.Cast<TPixel, byte>(img.data);
+			Span<byte> imgBytes = MemoryMarshal.Cast<TPixel, byte>(img.data); // TODO: Buffer scanlines for accessing purposes.
 
 			PixelFormat inputFormat = new(ScalarType.Integer, PngHelpers.GetPixelChannels(ihdr.colorType), ihdr.bitDepth / 8);
 
@@ -445,9 +445,9 @@ namespace ImageLib.Png
 		{
 			PixelFormat outputFormat = new(ScalarType.Integer, PngHelpers.GetPixelChannels(ihdr.colorType), ihdr.bitDepth / 8);
 			int bytesPerPixel = outputFormat.channels * outputFormat.bytesPerChannel;
-			int stride = img.width * bytesPerPixel;
+			int stride = img.Width * bytesPerPixel;
 
-			for (int scanline = 0; scanline < img.height; scanline++)
+			for (int scanline = 0; scanline < img.Height; scanline++)
 			{
 				Span<byte> outputScanline = output.Slice(1 + (stride + 1) * scanline, stride);
 				Span<TPixel> imgScanline = img[scanline];
@@ -458,7 +458,7 @@ namespace ImageLib.Png
 				}
 			}
 
-			for (int scanline = img.height - 1; scanline >= 0; scanline--)
+			for (int scanline = img.Height - 1; scanline >= 0; scanline--)
 			{
 				Span<byte> scanlineSpan = output.Slice(1 + (stride + 1) * scanline, stride);
 
