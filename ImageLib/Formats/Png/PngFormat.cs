@@ -1,5 +1,4 @@
-﻿using Engine.Utils;
-using MathLib;
+﻿using MathLib;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.IO.Compression;
@@ -11,6 +10,8 @@ using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using System.Text;
 using System.Xml.Linq;
+using UtilLib.Span;
+using UtilLib.Stream;
 using ZlibNGSharpMinimal.Deflate;
 using ZlibNGSharpMinimal.Inflate;
 using static System.Runtime.InteropServices.JavaScript.JSType;
@@ -576,7 +577,7 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 
 		public static PngIDAT ReadIDAT(ref readonly PngChunkHeader header, DataReader reader, ref SpanList<byte> data)
 		{
-			reader.Read(data.Allocate((int)header.length));
+			reader.Read(data.Reserve((int)header.length));
 
 			return default;
 		}

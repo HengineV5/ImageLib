@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Buffers.Binary;
+using UtilLib.Span;
 using ZlibNGSharpMinimal.Deflate;
 using ZlibNGSharpMinimal.Inflate;
 

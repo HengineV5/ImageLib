@@ -1,5 +1,4 @@
-﻿using Engine.Utils;
-using ImageLib.Exr.Compression;
+﻿using ImageLib.Exr.Compression;
 using ImageLib.Hdr;
 using MathLib;
 using System;
@@ -9,6 +8,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using UtilLib.Span;
+using UtilLib.Stream;
 
 namespace ImageLib.Exr
 {

@@ -1,5 +1,4 @@
-﻿using Engine.Utils;
-using ImageLib.Png;
+﻿using ImageLib.Png;
 using MathLib;
 using System;
 using System.Buffers;
@@ -12,6 +11,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using UtilLib.Stream;
 
 namespace ImageLib.Jpg
 {

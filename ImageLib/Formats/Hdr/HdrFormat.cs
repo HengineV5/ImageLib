@@ -1,5 +1,4 @@
-﻿using Engine.Utils;
-using MathLib;
+﻿using MathLib;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -10,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using UtilLib.Span;
 
 namespace ImageLib.Hdr
 {
