@@ -1,5 +1,7 @@
 ﻿using ImageLib.Exr;
 using ImageLib.Hdr;
+using ImageLib.Jpg;
+using ImageLib.Jxl;
 using ImageLib.Png;
 using MathLib;
 using System.IO;
@@ -25,6 +27,11 @@ namespace ImageLib
 					return FormatStorage<HdrConfig>.formatHandler.GetMetadata(stream);
 				case ".exr":
 					return FormatStorage<ExrConfig>.formatHandler.GetMetadata(stream);
+				case ".jpeg":
+				case ".jpg":
+					return FormatStorage<JpgConfig>.formatHandler.GetMetadata(stream);
+				case ".jxl":
+					return FormatStorage<JxlConfig>.formatHandler.GetMetadata(stream);
 				default:
 					throw new Exception("Image format not supported");
 			}
@@ -38,10 +45,17 @@ namespace ImageLib
 					FormatStorage<PngConfig>.formatHandler.Decode(stream, image);
 					break;
 				case ".hdr":
-					FormatStorage<HdrConfig>.formatHandler.Decode(stream, image);
+					FormatStorage<JpgConfig>.formatHandler.Decode(stream, image);
 					break;
 				case ".exr":
 					FormatStorage<ExrConfig>.formatHandler.Decode(stream, image);
+					break;
+				case ".jpeg":
+				case ".jpg":
+					FormatStorage<JpgConfig>.formatHandler.Decode(stream, image);
+					break;
+				case ".jxl":
+					FormatStorage<JxlConfig>.formatHandler.Decode(stream, image);
 					break;
 				default:
 					throw new Exception("Image format not supported");
@@ -54,6 +68,16 @@ namespace ImageLib
 			{
 				case ".png":
 					FormatStorage<PngConfig>.formatHandler.Encode(stream, image, PngConfig.Default);
+					break;
+				case ".exr":
+					FormatStorage<ExrConfig>.formatHandler.Encode(stream, image, ExrConfig.Default);
+					break;
+				case ".jpeg":
+				case ".jpg":
+					FormatStorage<JpgConfig>.formatHandler.Encode(stream, image, JpgConfig.Default);
+					break;
+				case ".jxl":
+					FormatStorage<JxlConfig>.formatHandler.Encode(stream, image, JxlConfig.Default);
 					break;
 				default:
 					throw new Exception("Image format not supported");
@@ -73,6 +97,8 @@ namespace ImageLib
 			FormatStorage.AddFormat(PngFormat.Instance);
 			FormatStorage.AddFormat(HdrFormat.Instance);
 			FormatStorage.AddFormat(ExrFormat.Instance);
+			FormatStorage.AddFormat(JpgFormat.Instance);
+			FormatStorage.AddFormat(JxlFormat.Instance);
 		}
 
 		// TODO: The way metadata is gathered from files is a bit akward, can probably be done better.

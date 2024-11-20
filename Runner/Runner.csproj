@@ -35,6 +35,12 @@
     <None Update="Images\Hdr\Test.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Images\Jpg\Known.jpg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Images\Jpg\Test.jpeg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Images\Png\Big.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

@@ -577,6 +577,7 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 		public static PngIDAT ReadIDAT(ref readonly PngChunkHeader header, DataReader reader, ref SpanList<byte> data)
 		{
 			reader.Read(data.Allocate((int)header.length));
+
 			return default;
 		}
 

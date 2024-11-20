@@ -88,7 +88,7 @@ namespace ImageLib
 		}
 	}
 
-	public ref struct SpanDataReader
+	public ref struct SpanReader
 	{
 		public int Remaining => data.Length - idx;
 
@@ -96,7 +96,7 @@ namespace ImageLib
 		int idx = 0;
 		bool invertEndianess;
 
-		public SpanDataReader(ReadOnlySpan<byte> data, bool isLittleEndian = false)
+		public SpanReader(ReadOnlySpan<byte> data, bool isLittleEndian = false)
 		{
 			this.data = data;
 			this.invertEndianess = isLittleEndian != BitConverter.IsLittleEndian; // If system and data endianess is mismatched invert endianess
@@ -160,6 +160,6 @@ namespace ImageLib
 			return MemoryMarshal.AsRef<T>(data.Slice(idx - sizeof(T), sizeof(T)));
 		}
 
-		public static implicit operator SpanDataReader(ReadOnlySpan<byte> span) => new(span);
+		public static implicit operator SpanReader(ReadOnlySpan<byte> span) => new(span);
 	}
 }

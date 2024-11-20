@@ -33,7 +33,7 @@ namespace ImageLib.Exr.Compression
 			if (input.Length < 4)
 				throw new Exception();
 
-			SpanDataReader reader = new(input, true);
+			SpanReader reader = new(input, true);
 
 			Console.WriteLine($"Rem: {reader.Remaining}");
 			ushort minNonZero = reader.ReadUInt16();
@@ -91,7 +91,7 @@ namespace ImageLib.Exr.Compression
 			return k--;
 		}
 
-		static bool HuffmanUncompress(scoped SpanDataReader reader, int length, scoped Span<byte> ouput)
+		static bool HuffmanUncompress(scoped SpanReader reader, int length, scoped Span<byte> ouput)
 		{
 			if (length == 0)
 				return false;

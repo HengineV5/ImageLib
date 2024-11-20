@@ -13,6 +13,7 @@ using Engine.Utils;
 using MathLib;
 using System.Runtime.Intrinsics;
 using System.Runtime.CompilerServices;
+using ImageLib.Jpg;
 
 namespace Runner
 {
@@ -31,7 +32,9 @@ namespace Runner
 			//var img = Image.Load<Rgba64>("Images/Hdr/Big.hdr");
 			//var img = Image.Load<Rgb24>("Images/Png/PNG_test.png");
 			//var img = Image.Load<Rgb48>("Images/Png/Big.png");
-			var img = Image.Load<Rgba32>("Images/Exr/AllHalfValues.exr");
+			//var img = Image.Load<Rgba32>("Images/Exr/AllHalfValues.exr");
+			var img = Image.Load<Rgba32, JpgConfig>("Images/Jpg/Known.jpg");
+			//var img = Image.Load<Rgba32, JpgConfig>("Images/Jpg/Test.jpeg");
 			//var img = Image.Load<Rgba32>("Images/Exr/Sample.exr");
 			//var img = Image.Load<Rgb24, PngConfig>(imgData);
 			/*
