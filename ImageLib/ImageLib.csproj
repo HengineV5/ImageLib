@@ -5,13 +5,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	<LangVersion>preview</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="carlst99.ZlibNGSharp" Version="1.2.0" />
     <PackageReference Include="MathLib" Version="0.0.13" />
     <PackageReference Include="MathLib.Imaging" Version="0.0.13" />
-    <PackageReference Include="UtilLib" Version="0.0.1" />
+    <PackageReference Include="UtilLib" Version="0.0.24" />
   </ItemGroup>
 
 </Project>

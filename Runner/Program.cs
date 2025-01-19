@@ -33,8 +33,9 @@ namespace Runner
 			//var img = Image.Load<Rgb24>("Images/Png/PNG_test.png");
 			//var img = Image.Load<Rgb48>("Images/Png/Big.png");
 			//var img = Image.Load<Rgba32>("Images/Exr/AllHalfValues.exr");
-			var img = Image.Load<Rgba32, JpgConfig>("Images/Jpg/Known.jpg");
-			//var img = Image.Load<Rgba32, JpgConfig>("Images/Jpg/Test.jpeg");
+			//var img = Image.Load<Rgba32, JpgConfig>("Images/Jpg/Known.jpg");
+			var img = Image.Load<Rgba32, JpgConfig>("Images/Jpg/Test.jpeg");
+			//var img = Image.Load<Rgba32, JpgConfig>("Images/Jpg/Profile.jpg");
 			//var img = Image.Load<Rgba32>("Images/Exr/Sample.exr");
 			//var img = Image.Load<Rgb24, PngConfig>(imgData);
 			/*
@@ -50,6 +51,17 @@ namespace Runner
 			}
 			*/
 
+			//Console.WriteLine($"Image: {img[70, 250]}");
+
+			for (int x = 0; x < img.Width; x++)
+			{
+				for (int y = 0; y < img.Height; y++)
+				{
+					img[x, y].a = 255;
+				}
+			}
+
+			Image.Save("Test.png", img.Span);
 			Console.WriteLine("Decoded");
 
 			/*
