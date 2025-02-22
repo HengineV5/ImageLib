@@ -89,6 +89,7 @@ namespace ImageLib.Jpg
 		static byte[] JPG_APP_HEADER     = [0xFF, 0xE0];
 		static byte[] JPG_QUANT_TABLE    = [0xFF, 0xDB];
 		static byte[] JPG_FRAME_START    = [0xFF, 0xC0];
+		static byte[] JPG_FRAME_START_1  = [0xFF, 0xC1];
 		static byte[] JPG_FRAME_START_2  = [0xFF, 0xC2];
 		static byte[] JPG_HUFF_TABLE     = [0xFF, 0xC4];
 		static byte[] JPG_SCAN_START     = [0xFF, 0xDA];
@@ -101,8 +102,6 @@ namespace ImageLib.Jpg
 		public ImageMetadata GetMetadata(Stream stream)
 		{
 			using DataReader reader = new DataReader(stream, false);
-
-			Console.WriteLine($"Total length: {reader.Remaining}");
 
 			Span<byte> buff = stackalloc byte[2];
 			reader.Read(buff);
@@ -137,14 +136,12 @@ namespace ImageLib.Jpg
 				reader.Seek(reader.Position + len - 2);
 			}
 
-			return new ImageMetadata(frameStart.components, 8, frameStart.width, frameStart.height + 10, 1);
+			return new ImageMetadata(frameStart.components, 8, frameStart.width, frameStart.height, 1);
 		}
 
 		public void Decode<TPixel>(Stream stream, scoped ImageSpan<TPixel> image) where TPixel : unmanaged, IPixel<TPixel>
 		{
 			using DataReader reader = new DataReader(stream, false);
-
-			Console.WriteLine($"Total length: {reader.Remaining}");
 
 			Span<byte> buff = stackalloc byte[2];
 			reader.Read(buff);
@@ -177,24 +174,19 @@ namespace ImageLib.Jpg
 
 				if (buff.SequenceEqual(JPG_APP_HEADER))
 				{
-					Console.WriteLine($"App header: {len}");
 					reader.Seek(reader.Position + len - 2);
 				}
 				else if (buff.SequenceEqual(JPG_QUANT_TABLE))
 				{
-					Console.WriteLine($"Quant table: {len}");
 					quantTables[quantIdx] = JpgHelpers.DecodeQuantTable(reader, ref stack);
 					quantIdx++;
 				}
-				else if (buff.SequenceEqual(JPG_FRAME_START))
+				else if (buff.SequenceEqual(JPG_FRAME_START) || buff.SequenceEqual(JPG_FRAME_START_1))
 				{
-					Console.WriteLine($"Frame start: {len}");
 					frameStart = JpgHelpers.DecodeFrameStart(reader, ref stack);
 				}
 				else if (buff.SequenceEqual(JPG_HUFF_TABLE))
 				{
-					Console.WriteLine($"Huff table: {len}");
-
 					var huff = JpgHelpers.DecodeHuffman(reader, ref stack, out int idx);
 
 					if (huff.type == HuffmanTableType.DC)
@@ -208,17 +200,15 @@ namespace ImageLib.Jpg
 				}
 				else if (buff.SequenceEqual(JPG_SCAN_START))
 				{
-					Console.WriteLine($"0xFFDA: {reader.Remaining}");
-
-					Console.WriteLine($"Scan start: {len}");
-
 					scanHeader = JpgHelpers.DecodeScanHeader(reader, ref stack);
 
 					break;
 				}
+				else
+				{
+					throw new Exception($"Unknown header: 0x{buff[0]:X}{buff[1]:X}");
+				}
 			}
-
-			Console.WriteLine($"Before remove: {reader.Remaining}");
 
 			int remaining = (int)reader.Remaining;
 			using IMemoryOwner<byte> data = MemoryPool<byte>.Shared.Rent(remaining);
@@ -228,7 +218,6 @@ namespace ImageLib.Jpg
 
 			var pre = dataSpan.Length;
 			dataSpan = JpgHelpers.FilterFF00(dataSpan);
-			Console.WriteLine($"Filtered bytes: {pre - dataSpan.Length}");
 			scoped SpanBitReader dataStream = dataSpan;
 
 			/*
@@ -246,51 +235,26 @@ namespace ImageLib.Jpg
 			Console.WriteLine();
 			 */
 
-			Console.WriteLine($"Span: {dataSpan.Length}");
-			Console.WriteLine($"Start of stream: {dataStream.Remaining / 8}");
-
-			scoped Span<JpgComponent> components = GetComponents(ref frameStart, ref scanHeader, ref stack);
+			scoped Span<JpgComponent> components = JpgHelpers.GetComponents(ref frameStart, ref scanHeader, ref stack);
 
 			int elementsPerMcu = components[0].maxHorizontalSampling * components[0].maxVerticalSampling;
 			Span<float> dataBuff = stack.Alloc<float>(MCU_BLOCK_SIZE * elementsPerMcu * components.Length);
-
-			Console.WriteLine("Componbents");
-			for (int i = 0; i < components.Length; i++)
-			{
-				Console.WriteLine($"{i}");
-				Console.WriteLine($"DcTable: {components[i].dcTable}");
-				Console.WriteLine($"\tCount: {dcTables[components[i].dcTable].tree.Nodes}");
-				Console.WriteLine($"AcTable: {components[i].acTable}");
-				Console.WriteLine($"\tCount: {acTables[components[i].acTable].tree.Nodes}");
-			}
-
-			//Console.WriteLine($"Value: {dataSpan[20595]}, {dataSpan[20596]}, {dataSpan[20597]}");
-			Console.WriteLine($"Total: {dataStream.Remaining + 2960}");
-			Console.WriteLine($"Vertical: {frameStart.componentData[1].samplingVertical}");
-			Console.WriteLine($"Horizontal: {frameStart.componentData[1].samplingHorizontal}");
 
 			int rows = (frameStart.height + 8 * components[0].verticalSampling - 1) / (8 * components[0].verticalSampling);
 			int cols = (frameStart.width + 8 * components[0].horizontalSampling - 1) / (8 * components[0].horizontalSampling);
 			int levelShift = 1 << (frameStart.precision - 1);
 			levelShift = 0;
 
-			Console.WriteLine($"Rows: {rows}");
-			Console.WriteLine($"Cols: {cols}");
-
 			for (int row = 0; row < rows; row++)
 			{
 				for (int col = 0; col < cols; col++)
 				{
-					Console.WriteLine($"x: {col}, y: {row}");
-
 					for (int i = 0; i < components.Length; i++)
 					{
 						ref JpgComponent component = ref components[i];
 
 						DecodeComponent(ref dataStream, ref component, ref quantTables, ref dcTables, ref acTables, dataBuff.Slice(MCU_BLOCK_SIZE * elementsPerMcu * i, MCU_BLOCK_SIZE * elementsPerMcu), levelShift);
 					}
-
-					//Console.WriteLine("---");
 
 					var yBuff = dataBuff.Slice(MCU_BLOCK_SIZE * elementsPerMcu * 0, MCU_BLOCK_SIZE * elementsPerMcu);
 					var cbBuff = dataBuff.Slice(MCU_BLOCK_SIZE * elementsPerMcu * 1, MCU_BLOCK_SIZE * elementsPerMcu);
@@ -299,11 +263,7 @@ namespace ImageLib.Jpg
 					WriteChunkToImage(col, row, components[0].maxHorizontalSampling, components[0].maxVerticalSampling, yBuff, cbBuff, crBuff, image);
 
 					dataBuff.Clear();
-
-					//throw new Exception();
 				}
-
-				//throw new Exception();
 			}
 		}
 
@@ -323,10 +283,8 @@ namespace ImageLib.Jpg
 			{
 				for (int h = 0; h < component.horizontalSampling; h++)
 				{
-					//output.Clear();
-
 					var sampleOutput = output.Slice(MCU_BLOCK_SIZE * (v * component.maxHorizontalSampling + h), MCU_BLOCK_SIZE);
-					//sampleOutput.Clear();
+					sampleOutput.Clear();
 
 					DecodeChunk(ref data, ref quantTables[component.quantizationTable], in dcTables[component.dcTable], in acTables[component.acTable], ref component.coeff, sampleOutput);
 
@@ -334,85 +292,47 @@ namespace ImageLib.Jpg
 
 					JpgHelpers.CalcIDCT(buff.Memory.Span, sampleOutput);
 
-					//JpgHelpers.ShiftData(sampleOutput, sampleOutput, levelShift);
+					JpgHelpers.ShiftData(sampleOutput, sampleOutput, levelShift);
 
 					buff.Memory.Span.Clear();
 				}
 			}
 
+			// Scale MCU to max sampling
 			if (component.verticalSampling != component.maxVerticalSampling || component.horizontalSampling != component.maxHorizontalSampling)
 			{
-				using IMemoryOwner<float> buff2 = MemoryPool<float>.Shared.Rent(MCU_BLOCK_SIZE);
-				buff2.Memory.Span.Clear();
-
-				output.Slice(0, MCU_BLOCK_SIZE).TryCopyTo(buff2.Memory.Span);
-				//var baseBlock = output.Slice(0, MCU_BLOCK_SIZE);
-				var baseBlock = buff2.Memory.Span.Slice(0, MCU_BLOCK_SIZE);
-				for (int by = 2 - 1; by >= 0; by--)
+				var baseBlock = output.Slice(0, MCU_BLOCK_SIZE);
+				for (int by = component.verticalSubsampling - 1; by >= 0; by--)
 				{
-					for (int bx = 2 - 1; bx >= 0; bx--)
+					for (int bx = component.horizontalSubsampling - 1; bx >= 0; bx--)
 					{
-						//var baseBlock = output.Slice((MCU_BLOCK_SIZE / 4) * (by * 2 + bx), MCU_BLOCK_SIZE / 4);
 						var outputBlock = output.Slice(MCU_BLOCK_SIZE * (by * 2 + bx), MCU_BLOCK_SIZE);
+						int blockXOffset = bx * 4;
+						int blockYOffset = by * 4;
 
-						for (int y = 0; y < 8; y++)
+						for (int y = 8 - 1; y >= 0; y--)
 						{
-							for (int x = 0; x < 8; x++)
+							for (int x = 8 - 1; x >= 0; x--)
 							{
-								//outputBlock[y * 8 + x] = baseBlock[(y / 2) * 4 + x / 2];
-								outputBlock[y * 8 + x] = baseBlock[(y / 2 + by * 4) * 8 + (x / 2) + bx * 4];
+								outputBlock[y * 8 + x] = baseBlock[(y / 2 + blockYOffset) * 8 + (x / 2) + blockXOffset];
 							}
 						}
 					}
 				}
-				/*
-				*/
-
-
-				for (int y = 16 - 1; y >= 0; y--)
-				{
-					for (int x = 16 - 1; x >= 0; x--)
-					{
-						//output[16 * y + x] = output[8 * (y / 2) + x / 2];
-						//output[16 * y + x] = output[16 * y + x / 2];
-						//Console.WriteLine($"{8 * y + x} = {8 * (y / 2) + (x / 2)}");
-						//output[16 * y + x] = 255f;
-					}
-				}
 			}
-			/*
-			*/
 		}
 
 		static void DecodeChunk(scoped ref SpanBitReader data, scoped ref JpgQuantTable quantTable, scoped ref readonly SpanHuffmanTable<byte> dcTable, scoped ref readonly SpanHuffmanTable<byte> acTable, ref int oldDeltaCoeff, scoped Span<float> output)
 		{
-			//Console.WriteLine("-");
-			//Console.WriteLine($"Total: {data.Remaining + 2960}");
-
 			byte category = dcTable.ReadValue(ref data);
 			int bits = data.ReadBits(category);
-
-			//Console.WriteLine($"Category: {category}");
-			//Console.WriteLine($"Bits: {bits}");
-
-			//bool doPrint = category == 3;
-			bool doPrint = false;
 
 			oldDeltaCoeff = JpgHelpers.DecodeNumber(category, bits) + oldDeltaCoeff;
 			output[0] = oldDeltaCoeff * quantTable.data[0];
 
-			//Console.WriteLine(oldDeltaCoeff);
-			//Console.WriteLine($"	Comp 1: {oldDeltaCoeff}");
-
-			//if (doPrint)
-			//	Console.WriteLine($"Nodes: {acTable.tree.Nodes}");
-
 			for (int i = 1; i < 64; i++)
 			{
-				category = acTable.ReadValue(ref data, doPrint && i == 47);
-
-				//if (doPrint)
-				//	Console.WriteLine($"Ac cat {i}: {category}");
+				category = acTable.ReadValue(ref data);
 
 				if (category == 0)
 					break;
@@ -422,7 +342,6 @@ namespace ImageLib.Jpg
 
 				bits = data.ReadBits(category);
 				output[i] = JpgHelpers.DecodeNumber(category, bits) * quantTable.data[i];
-				//Console.WriteLine($"O: {JpgHelpers.DecodeNumber(category, bits)}");
 			}
 		}
 
@@ -444,21 +363,30 @@ namespace ImageLib.Jpg
 			PixelFormat inputFormat = new(ScalarType.Integer, 3, 1);
 
 			int blockSize = 8;
+			int chunkXOffset = chunkX * blockSize * maxHorizontalSampling;
+			int chunkYOffset = chunkY * blockSize * maxVerticalSampling;
 
 			for (int by = 0; by < maxVerticalSampling; by++)
 			{
 				for (int bx = 0; bx < maxHorizontalSampling; bx++)
 				{
 					var yBuffBlock = yBuff.Slice(MCU_BLOCK_SIZE * (by * 2 + bx), MCU_BLOCK_SIZE);
-					//var cbBuffBlock = cbBuff.Slice(MCU_BLOCK_SIZE * (0 * 2 + 0), MCU_BLOCK_SIZE);
 					var cbBuffBlock = cbBuff.Slice(MCU_BLOCK_SIZE * (by * 2 + bx), MCU_BLOCK_SIZE);
-					//var crBuffBlock = crBuff.Slice(MCU_BLOCK_SIZE * (0 * 2 + 0), MCU_BLOCK_SIZE);
 					var crBuffBlock = crBuff.Slice(MCU_BLOCK_SIZE * (by * 2 + bx), MCU_BLOCK_SIZE);
+
+					int blockXOffset = chunkXOffset + bx * blockSize;
+					int blockYOffset = chunkYOffset + by * blockSize;
 
 					for (int y = 0; y < blockSize; y++)
 					{
+						if (blockYOffset + y >= image.Height)
+							break;
+
 						for (int x = 0; x < blockSize; x++)
 						{
+							if (blockXOffset + x >= image.Width)
+								break;
+
 							//var rgb = YCrCbToRGB(yBuff[y * blockSize + x], cbBuff[yHalf * 8 + xHalf], crBuff[yHalf * 8 + xHalf]);
 							//var rgb = YCrCbToRGB(yBuff[y * blockSize + x], yBuff[y * blockSize + x], yBuff[y * blockSize + x]);
 							//var rgb = YCrCbToRGB(cbBuff[y * blockSize + x], cbBuff[y * blockSize + x], cbBuff[y * blockSize + x]);
@@ -472,43 +400,13 @@ namespace ImageLib.Jpg
 
 							unsafe
 							{
-								PixelOperations.Read(ref image[chunkX * blockSize * maxHorizontalSampling + bx * blockSize + x, chunkY * blockSize * maxVerticalSampling + by * blockSize + y], in inputFormat, new ReadOnlySpan<byte>((byte*)&rgb, 3));
+								PixelOperations.Read(ref image[blockXOffset + x, blockYOffset + y], in inputFormat, new ReadOnlySpan<byte>((byte*)&rgb, 3));
 							}
 							//PixelOperations.Read(ref image[x * 8 + xx, y * 8 + yy], in inputFormat);
 						}
 					}
 				}
 			}
-		}
-
-		static Span<JpgComponent> GetComponents(scoped ref JpgFrameStart frameStart, scoped ref JpgScanHeader scanHeader, scoped ref SpanStack stack)
-		{
-			Span<JpgComponent> components = stack.Alloc<JpgComponent>(frameStart.components);
-
-			int maxHorizontalSampling = 1;
-			int maxVerticalSampling = 1;
-			for (int i = 0; i < frameStart.componentData.Length; i++)
-			{
-				maxHorizontalSampling = int.Max(maxHorizontalSampling, frameStart.componentData[i].samplingHorizontal);
-				maxVerticalSampling = int.Max(maxVerticalSampling, frameStart.componentData[i].samplingVertical);
-			}
-
-			for (int i = 0; i < components.Length; i++)
-			{
-				ref var comp = ref components[i];
-				comp.quantizationTable = frameStart.componentData[i].quantTable;
-				comp.horizontalSampling = frameStart.componentData[i].samplingHorizontal;
-				comp.verticalSampling = frameStart.componentData[i].samplingVertical;
-				comp.maxHorizontalSampling = maxHorizontalSampling;
-				comp.maxVerticalSampling = maxVerticalSampling;
-				comp.horizontalSubsampling = maxHorizontalSampling / comp.horizontalSampling;
-				comp.verticalSubsampling = maxVerticalSampling / comp.verticalSampling;
-				comp.coeff = 0;
-				comp.dcTable = scanHeader.componentData[i].dcTable;
-				comp.acTable = scanHeader.componentData[i].acTable;
-			}
-
-			return components;
 		}
 	}
 
@@ -554,14 +452,6 @@ namespace ImageLib.Jpg
 			Span<byte> lengths = stackalloc byte[16];
 			reader.Read(lengths);
 
-			Console.Write($"Lengths: ");
-
-			for (int i = 0; i < lengths.Length; i++)
-			{
-				Console.Write($"{lengths[i]}, ");
-			}
-			Console.WriteLine();
-
 			int sum = 0;
 			for (int i = 0; i < lengths.Length; i++)
 			{
@@ -575,9 +465,6 @@ namespace ImageLib.Jpg
 			SpanHuffmanTable<byte> huffmanTable = new(htType, tree);
 
 			huffmanTable.AddDHT(lengths, elements);
-
-			Console.WriteLine($"Tree Root: {tree.GetRoot()}");
-			//tree.PrintTree();
 
 			return huffmanTable;
 		}
@@ -655,8 +542,6 @@ namespace ImageLib.Jpg
 
 			while (charIdx != -1)
 			{
-				//Console.WriteLine($"Removed {removed} at {charIdx + removed}");
-
 				data.Slice(charIdx + 2).TryCopyTo(data.Slice(charIdx + 1));
 				removed++;
 
@@ -680,6 +565,36 @@ namespace ImageLib.Jpg
 			}
 
 			throw new IndexOutOfRangeException();
+		}
+
+		public static Span<JpgComponent> GetComponents(scoped ref JpgFrameStart frameStart, scoped ref JpgScanHeader scanHeader, scoped ref SpanStack stack)
+		{
+			Span<JpgComponent> components = stack.Alloc<JpgComponent>(frameStart.components);
+
+			int maxHorizontalSampling = 1;
+			int maxVerticalSampling = 1;
+			for (int i = 0; i < frameStart.componentData.Length; i++)
+			{
+				maxHorizontalSampling = int.Max(maxHorizontalSampling, frameStart.componentData[i].samplingHorizontal);
+				maxVerticalSampling = int.Max(maxVerticalSampling, frameStart.componentData[i].samplingVertical);
+			}
+
+			for (int i = 0; i < components.Length; i++)
+			{
+				ref var comp = ref components[i];
+				comp.quantizationTable = frameStart.componentData[i].quantTable;
+				comp.horizontalSampling = frameStart.componentData[i].samplingHorizontal;
+				comp.verticalSampling = frameStart.componentData[i].samplingVertical;
+				comp.maxHorizontalSampling = maxHorizontalSampling;
+				comp.maxVerticalSampling = maxVerticalSampling;
+				comp.horizontalSubsampling = maxHorizontalSampling / comp.horizontalSampling;
+				comp.verticalSubsampling = maxVerticalSampling / comp.verticalSampling;
+				comp.coeff = 0;
+				comp.dcTable = scanHeader.componentData[i].dcTable;
+				comp.acTable = scanHeader.componentData[i].acTable;
+			}
+
+			return components;
 		}
 
 		public static int DecodeNumber(int code, int bits)

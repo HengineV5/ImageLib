@@ -2,6 +2,7 @@
 using ImageLib.Hdr;
 using MathLib;
 using System.Buffers;
+using ImageLib.Jpg;
 
 namespace ImageLib.Test
 {
@@ -10,6 +11,7 @@ namespace ImageLib.Test
 		Memory<byte> img_png_rgba32;
 		Memory<byte> img_png_rgb24;
 		Memory<byte> img_hdr;
+		Memory<byte> img_jpg;
 
 		[SetUp]
 		public void Setup()
@@ -17,6 +19,7 @@ namespace ImageLib.Test
 			img_png_rgba32 = File.ReadAllBytes("TestImages/Png/Test_RGBA32.png");
 			img_png_rgb24 = File.ReadAllBytes("TestImages/Png/Test_RGB24.png");
 			img_hdr = File.ReadAllBytes("TestImages/Hdr/Test.hdr");
+			img_jpg = File.ReadAllBytes("TestImages/Jpg/Test.jpg");
 		}
 
 		[Test]
@@ -44,6 +47,25 @@ namespace ImageLib.Test
 			TestHelpers.TestFormatLoad<Rgba64, HdrConfig>(img_hdr.Span, x => {
 				AssertPixel(in x[10, 15], in pixel1);
 				AssertPixel(in x[23, 25], in pixel2);
+			});
+		}
+
+		[Test]
+		public void TestJpg()
+		{
+			var pixel1 = new Rgb24(161, 113, 137);
+			var pixel2 = new Rgb24(148, 97, 127);
+
+			var margin = new Rgb24(2, 2, 2);
+
+			TestHelpers.TestFormatLoad<Rgb24, JpgConfig>(img_jpg.Span, x => {
+				AssertPixel(in x[10, 15], in pixel1, in margin);
+				AssertPixel(in x[23, 25], in pixel2, in margin);
+			});
+
+			TestHelpers.TestFormatLoad<Rgb48, JpgConfig>(img_jpg.Span, x => {
+				AssertPixel(in x[10, 15], in pixel1, in margin);
+				AssertPixel(in x[23, 25], in pixel2, in margin);
 			});
 		}
 
@@ -154,6 +176,20 @@ namespace ImageLib.Test
 			Assert.That(pixel1.g == pixel2.g, Is.True);
 			Assert.That(pixel1.b == pixel2.b, Is.True);
 			Assert.That(pixel1.a == pixel2.a, Is.True);
+		}
+
+		static void AssertPixel(ref readonly Rgb24 pixel1, ref readonly Rgb24 pixel2, ref readonly Rgb24 margin)
+		{
+			Assert.That(int.Abs(pixel1.r - pixel2.r) < margin.r, Is.True);
+			Assert.That(int.Abs(pixel1.g - pixel2.g) < margin.g, Is.True);
+			Assert.That(int.Abs(pixel1.b - pixel2.b) < margin.b, Is.True);
+		}
+
+		static void AssertPixel(ref readonly Rgb48 pixel1, ref readonly Rgb24 pixel2, ref readonly Rgb24 margin)
+		{
+			Assert.That(int.Abs(pixel1.r - pixel2.r) < margin.r, Is.True);
+			Assert.That(int.Abs(pixel1.g - pixel2.g) < margin.g, Is.True);
+			Assert.That(int.Abs(pixel1.b - pixel2.b) < margin.b, Is.True);
 		}
 	}
 

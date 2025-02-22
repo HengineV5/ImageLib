@@ -13,35 +13,19 @@ namespace ImageLib.Jpg
 			this.tree = tree;
 		}
 
-		public T ReadValue(scoped ref SpanBitReader buffer, bool doPrint = false)
+		public T ReadValue(scoped ref SpanBitReader buffer)
 		{
 			ref var node = ref tree.GetNode(tree.GetRoot());
-			if (doPrint)
-				Console.WriteLine($"Root: {tree.GetRoot()}, R: {node.right}, L: {node.left}");
-
 			while (node.right != -1 || node.left != -1)
 			{
-				var bit = buffer.ReadBit();
-				if (doPrint)
-					Console.WriteLine($"\tBit: {(bit ? 1 : 0)}");
-
-				if (bit)
+				if (buffer.ReadBit())
 				{
-					if (doPrint)
-						Console.WriteLine($"Chose: {node.right}");
-
 					node = ref tree.GetNode(node.right);
 				}
 				else
 				{
-					if (doPrint)
-						Console.WriteLine($"Chose: {node.left}");
-
 					node = ref tree.GetNode(node.left);
 				}
-
-				//if (doPrint)
-				//	Console.WriteLine($"R: {node.right != -1}, L: {node.left != -1}");
 			}
 
 			return node.value;
@@ -62,8 +46,6 @@ namespace ImageLib.Jpg
 
 				maxDepth--;
 			}
-
-			Console.WriteLine($"MaxDepth: {maxDepth}");
 
 			ref var node = ref tree.CreateNode(out var nodeIdx);
 			node.left = AddDHT(lengths, elements, depth, maxDepth, nodeIdx, ref element);

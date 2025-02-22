@@ -33,6 +33,9 @@
     <None Update="TestImages\Hdr\Test.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="TestImages\Jpg\Test.jpg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="TestImages\Png\Test.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
