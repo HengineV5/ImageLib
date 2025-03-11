@@ -212,7 +212,21 @@ namespace ImageLib.Png
 							byte xByte = dataPtr[scanline * stride + 1 + (pixel * bytesPerPixel) + x]; // First byte of each scanline is filter type
 
 							tmpPixel[x] = xByte;
+						}
 
+						// PNG is Big Endian
+						if (BitConverter.IsLittleEndian && inputFormat.bytesPerChannel == 2) // TODO: Fix this later
+						{
+							for (int i = 0; i < bytesPerPixel / 2; i++)
+							{
+								var tmp = tmpPixel[i * 2];
+								tmpPixel[i * 2] = tmpPixel[i * 2 + 1];
+								tmpPixel[i * 2 + 1] = tmp;
+							}
+						}
+
+						for (int x = 0; x < bytesPerPixel; x++)
+						{
 							int imgByteOffset = x * bytePerPixelRatio + pixel * imgBytesPerPixel;
 							switch (filterType)
 							{
@@ -456,6 +470,19 @@ namespace ImageLib.Png
 				for (int x = 0; x < imgScanline.Length; x++)
 				{
 					PixelOperations.Write(in imgScanline[x], in outputFormat, outputScanline.Slice(x * bytesPerPixel, bytesPerPixel));
+
+					// PNG is Big Endian
+					if (BitConverter.IsLittleEndian && outputFormat.bytesPerChannel == 2) // TODO: Fix this later
+					{
+						var tmpPixel = outputScanline.Slice(x * bytesPerPixel, bytesPerPixel);
+
+						for (int i = 0; i < bytesPerPixel / 2; i++)
+						{
+							var tmp = tmpPixel[i * 2];
+							tmpPixel[i * 2] = tmpPixel[i * 2 + 1];
+							tmpPixel[i * 2 + 1] = tmp;
+						}
+					}
 				}
 			}
 

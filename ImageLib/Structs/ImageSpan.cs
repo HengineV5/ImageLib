@@ -1,5 +1,6 @@
 ﻿using MathLib;
 using System;
+using System.Runtime.InteropServices;
 
 namespace ImageLib
 {
@@ -75,6 +76,32 @@ namespace ImageLib
 				throw new IndexOutOfRangeException();
 
 			return new ImageSpan<TPixel>(width, srcWidth, height, x + offsetX, y + offsetY, data);
+		}
+
+		public void CopyTo(scoped Span<TPixel> dest)
+		{
+			if (dest.Length < Width * Height)
+				throw new IndexOutOfRangeException();
+
+			for (int i = 0; i < Height; i++)
+			{
+				this[i].CopyTo(dest.Slice(i * Width));
+			}
+		}
+
+		public void CopyTo(scoped Span<byte> dest)
+		{
+			var bytesPerPixel = (TPixel.BitDepth / 8) * TPixel.Channels;
+			var bytesPerScanline = Width * bytesPerPixel;
+
+			if (dest.Length < Width * Height * bytesPerPixel)
+				throw new IndexOutOfRangeException();
+
+			for (int i = 0; i < Height; i++)
+			{
+				var scanline = MemoryMarshal.Cast<TPixel, byte>(this[i]);
+				scanline.CopyTo(dest.Slice(i * bytesPerScanline, bytesPerScanline));
+			}
 		}
 	}
 

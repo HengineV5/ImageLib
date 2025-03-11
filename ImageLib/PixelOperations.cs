@@ -27,13 +27,13 @@ namespace ImageLib
 
 		public static void Write(ref readonly PixelFormat inputFormat, scoped ReadOnlySpan<byte> input, ref readonly PixelFormat outputFormat, scoped Span<byte> output)
 		{
-			if (outputFormat.channels == inputFormat.channels && outputFormat.bytesPerChannel == inputFormat.bytesPerChannel && outputFormat.type == inputFormat.type)
+			if (outputFormat.channels == inputFormat.channels && outputFormat.bytesPerChannel == inputFormat.bytesPerChannel && outputFormat.channelType == inputFormat.channelType)
 			{
 				input.TryCopyTo(output);
 				return;
 			}
 
-			if (outputFormat.type == ScalarType.Integer && inputFormat.type == ScalarType.Integer)
+			if (outputFormat.channelType == ScalarType.Integer && inputFormat.channelType == ScalarType.Integer)
 			{
 				int channelsToWrite = int.Min(outputFormat.channels, inputFormat.channels);
 				if (outputFormat.bytesPerChannel == inputFormat.bytesPerChannel)
@@ -56,7 +56,7 @@ namespace ImageLib
 					}
 				}
 			}
-			else if (outputFormat.type == ScalarType.Floating && inputFormat.type == ScalarType.Floating)
+			else if (outputFormat.channelType == ScalarType.Floating && inputFormat.channelType == ScalarType.Floating)
 			{
 				int channelsToWrite = int.Min(outputFormat.channels, inputFormat.channels);
 				if (outputFormat.bytesPerChannel == inputFormat.bytesPerChannel)
