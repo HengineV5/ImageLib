@@ -4,16 +4,16 @@ namespace ImageLib.Png
 {
 	public struct PngConfig : IFormatConfig<PngConfig>
 	{
-		public static PngConfig Default => new(8, 6, 0, 0, 0, 6);
+		public static PngConfig Default => new(8, PngColorType.TruecolorWithAlpha, 0, 0, 0, 6);
 
 		public byte bitDepth;
-		public byte colorType;
+		public PngColorType colorType;
 		public byte compressionMethod;
 		public byte filterMethod;
 		public byte interlaceMethod;
 		public int compressionLevel;
 
-		public PngConfig(byte bitDepth, byte colorType, byte compressionMethod, byte filterMethod, byte interlaceMethod, int compressionLevel)
+		public PngConfig(byte bitDepth, PngColorType colorType, byte compressionMethod, byte filterMethod, byte interlaceMethod, int compressionLevel)
 		{
 			this.bitDepth = bitDepth;
 			this.colorType = colorType;

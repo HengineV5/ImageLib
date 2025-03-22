@@ -1,7 +1,7 @@
 ﻿namespace ImageLib.Png
 {
-	struct PngIDAT
+	ref struct PngIDAT
 	{
-		public Memory<byte> data;
+		public Span<byte> data;
 	}
 }

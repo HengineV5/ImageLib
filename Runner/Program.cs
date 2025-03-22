@@ -31,8 +31,9 @@ namespace Runner
 			//var img = Image.Load<Rgba64>("Images/Hdr/Test.hdr");
 			//var img = Image.Load<Rgba64>("Images/Hdr/Big.hdr");
 			//var img = Image.Load<Rgb24>("Images/Png/PNG_test.png");
+			//var img = Image.Load<Rgba32>("Images/Png/Test2.png");
 			//var img = Image.Load<Rgb48>("Images/Png/Big.png");
-			var img = Image.Load<Rgba64>("Images/Png/cubemap.png");
+			var img = Image.Load<Rgb48>("Images/Png/DuckCM.png");
 			//var img = Image.Load<Rgba32>("Images/Exr/AllHalfValues.exr");
 			//var img = Image.Load<Rgba32, JpgConfig>("Images/Jpg/Known.jpg");
 			//var img = Image.Load<Rgba32, JpgConfig>("Images/Jpg/Test.jpeg");
@@ -54,25 +55,16 @@ namespace Runner
 
 			//Console.WriteLine($"Image: {img[70, 250]}");
 
-			/*
-			for (int x = 0; x < img.Width; x++)
+			for (int y = 0; y < img.Height; y++)
 			{
-				for (int y = 0; y < img.Height; y++)
+				for (int x = 0; x < img.Width; x++)
 				{
-					img[x, y].a = 255;
+					//Console.WriteLine(img[x, y]);
+					//img[x, y].a = 255;
 				}
 			}
+			/*
 			*/
-
-			var pix = img.Span[512, 0];
-			Rgba32 pix32 = new((byte)(pix.r / 255), (byte)(pix.g / 255), (byte)(pix.b / 255), (byte)(pix.a / 255));
-
-			Console.WriteLine(pix);
-			Console.WriteLine(pix32);
-			Console.WriteLine(img.Span[509, 0]);
-
-			Image.Save("Test.png", img.Span);
-			Console.WriteLine("Decoded");
 
 			/*
 			img.Span.FlipVertical();
@@ -96,6 +88,7 @@ namespace Runner
 			//var img = Image.Load<Rgb32>("Test.png");
 			//Image.Save("Test.png", mipmap.Span, PngConfig.FromPixel<Rgb24>());
 			//Image.Save(tmpImgData.Memory.Span, img.Span, PngConfig.FromPixel<Rgba32>());
+			Image.Save("Test.png", img.Span, PngConfig.FromPixel<Rgb24>());
 
 			Console.WriteLine("Saved");
 

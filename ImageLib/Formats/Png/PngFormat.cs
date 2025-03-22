@@ -1,20 +1,15 @@
 ﻿using MathLib;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.IO.Compression;
-using System.IO.Pipelines;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using System.Text;
-using System.Xml.Linq;
 using UtilLib.Span;
 using UtilLib.Stream;
 using ZlibNGSharpMinimal.Deflate;
 using ZlibNGSharpMinimal.Inflate;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace ImageLib.Png
 {
@@ -62,9 +57,14 @@ namespace ImageLib.Png
 			if (!signature.SequenceEqual(PNG_SIGNATURE))
 				throw new Exception("Invalid png signature");
 
+			using var stackMem = MemoryPool<byte>.Shared.Rent(787968 * 300); // TODO: Mabye do some approximation here
+			scoped SpanStack stack = stackMem.Memory.Span;
+
 			PngIHDR ihdr = new();
-			IMemoryOwner<byte> imgData = MemoryPool<byte>.Shared.Rent(0);
-			SpanList<byte> imgDataList = new();
+			PngPLTE plte = new();
+
+			scoped Span<byte> uncompressedData = new();
+			scoped SpanList<byte> compressedData = new();
 
 			while (true)
 			{
@@ -88,18 +88,18 @@ namespace ImageLib.Png
 							throw new Exception("Provided image span is too small.");
 
 						if (TPixel.BitDepth < ihdr.bitDepth)
-							throw new Exception("Cannot load image into frame with a lower bitdepth."); // For future henke: See line 206
+							throw new Exception("Cannot load image into frame with a lower bitdepth.");
 
 						int imgByteSize = PngHelpers.GetPixelChannels(ihdr.colorType) * (ihdr.bitDepth / 8) * (image.Width + 1) * image.Height;
-						imgData = MemoryPool<byte>.Shared.Rent(imgByteSize); // TODO: This is probably overkill.
-						imgData.Memory.Span.Clear();
-
-						imgDataList = new(imgData.Memory.Span);
+						compressedData = new(stack.Alloc<byte>(imgByteSize));
+						uncompressedData = stack.Alloc<byte>(imgByteSize);
 
 						break;
 					case "IDAT":
-						//PngIDAT idat = PngHelpers.ReadIDAT(in header, reader, ZLIB, ref zStream);
-						PngIDAT idat = PngHelpers.ReadIDAT(in header, reader, ref imgDataList);
+						PngIDAT idat = PngHelpers.ReadIDAT(in header, reader, ref compressedData);
+						break;
+					case "PLTE":
+						plte = PngHelpers.ReadPLTE(in header, reader, ref stack);
 						break;
 					case "sRGB":
 						PngsRGB srgb = PngHelpers.ReadsRGB(in header, reader);
@@ -113,8 +113,6 @@ namespace ImageLib.Png
 
 						break;
 				}
-
-				//Console.WriteLine($"{header.chunkType}: {header.length}, {bytesCount}, {imgDataList.Count}");
 
 				using IMemoryOwner<byte> headerData = MemoryPool<byte>.Shared.Rent((int)header.length);
 				Span<byte> headerDataSpan = headerData.Memory.Span.Slice(0, (int)header.length);
@@ -130,11 +128,10 @@ namespace ImageLib.Png
 					throw new Exception("Invalid crc");
 			}
 
-			using var uncompressed = MemoryPool<byte>.Shared.Rent(imgData.Memory.Length);
-
 			INFLATER.Reset();
-			ulong read = INFLATER.Inflate(imgDataList.AsSpan(), uncompressed.Memory.Span);
-			ProcessData(in ihdr, uncompressed.Memory.Span.Slice(0, (int)read), image);
+			ulong read = INFLATER.Inflate(compressedData.AsSpan(), uncompressedData);
+
+			ProcessData(in ihdr, in plte, uncompressedData.Slice(0, (int)read), image, ref stack);
 		}
 
 		public void Encode<TPixel>(Stream stream, scoped ImageSpan<TPixel> image, ref readonly PngConfig config) where TPixel : unmanaged, IPixel<TPixel>
@@ -178,11 +175,95 @@ namespace ImageLib.Png
 			return Image.CreateEmpty<TPixel>((int)ihdr.width, (int)ihdr.height);
 		}
 
-		static unsafe void ProcessData<TPixel>(ref readonly PngIHDR ihdr, scoped ReadOnlySpan<byte> data, scoped ImageSpan<TPixel> img) where TPixel : unmanaged, IPixel<TPixel>
+		static void ProcessData<TPixel>(ref readonly PngIHDR ihdr, ref readonly PngPLTE plte, scoped ReadOnlySpan<byte> data, scoped ImageSpan<TPixel> img, ref SpanStack stack) where TPixel : unmanaged, IPixel<TPixel>
+		{
+			PixelFormat inputFormat = new(ScalarType.Integer, PngHelpers.GetPixelChannels(ihdr.colorType), ihdr.bitDepth / 8);
+			scoped Span<byte> tmpPixel = stack.Alloc<byte>(inputFormat.channels * inputFormat.bytesPerChannel);
+
+			if (ihdr.colorType == PngColorType.IndexedColor)
+				inputFormat.channels = 1;
+
+			int channels = inputFormat.channels;
+			int bytesPerPixel = inputFormat.channels * inputFormat.bytesPerChannel;
+			int stride = (int)ihdr.width * bytesPerPixel;
+
+			int buffSize = stride * 2;
+			scoped Span<byte> rowBuff = buffSize <= 1024 * 4 ? stackalloc byte[buffSize] : stack.Alloc<byte>(buffSize);
+			Span<byte> currentRow = rowBuff.Slice(stride, stride);
+			Span<byte> prevRow = rowBuff.Slice(0, stride);
+
+			for (int scanline = 0; scanline < ihdr.height; scanline++)
+			{
+				int scanlineStart = scanline * (stride + 1);
+				byte filterType = data[scanlineStart];
+
+				if (filterType < 0 || filterType > 4)
+					throw new Exception($"Unknown filter type {filterType}");
+
+				data.Slice(scanlineStart + 1, stride).TryCopyTo(currentRow); // Copy row to tmp storage without filter
+
+				for (int pixel = 0; pixel < ihdr.width; pixel++)
+				{
+					Span<byte> pixelData = currentRow.Slice(pixel * bytesPerPixel, bytesPerPixel);
+
+					for (int x = 0; x < bytesPerPixel; x++)
+					{
+						switch (filterType)
+						{
+							case 1: // Sub
+								pixelData[x] += GetPixelByte_New(rowBuff, stride, bytesPerPixel, pixel, x - bytesPerPixel, PngRow.Current);
+								break;
+							case 2: // Up
+								pixelData[x] += GetPixelByte_New(rowBuff, stride, bytesPerPixel, pixel, x, PngRow.Previous);
+								break;
+							case 3: // Avg
+								pixelData[x] += (byte)((GetPixelByte_New(rowBuff, stride, bytesPerPixel, pixel, x - bytesPerPixel, PngRow.Current) + GetPixelByte_New(rowBuff, stride, bytesPerPixel, pixel, x, PngRow.Previous)) / 2);
+								break;
+							case 4: // Paeth
+								byte a = GetPixelByte_New(rowBuff, stride, bytesPerPixel, pixel, x - bytesPerPixel, PngRow.Current);
+								byte b = GetPixelByte_New(rowBuff, stride, bytesPerPixel, pixel, x, PngRow.Previous);
+								byte c = GetPixelByte_New(rowBuff, stride, bytesPerPixel, pixel, x - bytesPerPixel, PngRow.Previous);
+
+								pixelData[x] += PngHelpers.PaethPredictor(a, b, c);
+								break;
+							default:
+								break;
+						}
+					}
+
+					pixelData.CopyTo(tmpPixel);
+
+					if (ihdr.colorType == PngColorType.IndexedColor)
+					{
+						tmpPixel[2] = plte.pallet[pixelData[0]].blue;
+						tmpPixel[1] = plte.pallet[pixelData[0]].green;
+						tmpPixel[0] = plte.pallet[pixelData[0]].red;
+					}
+
+					// PNG is Big Endian
+					if (BitConverter.IsLittleEndian && inputFormat.bytesPerChannel == 2) // TODO: Fix this later
+					{
+						for (int i = 0; i < bytesPerPixel / 2; i++)
+						{
+							var tmp = tmpPixel[i * 2];
+							tmpPixel[i * 2] = tmpPixel[i * 2 + 1];
+							tmpPixel[i * 2 + 1] = tmp;
+						}
+					}
+
+					PixelOperations.Read(ref img[pixel, scanline], new(inputFormat.channelType, 3, inputFormat.bytesPerChannel), tmpPixel);
+				}
+
+				currentRow.CopyTo(prevRow);
+			}
+		}
+
+		static unsafe void ProcessDataPalette<TPixel>(ref readonly PngIHDR ihdr, ref readonly PngPLTE plte, scoped ReadOnlySpan<byte> data, scoped ImageSpan<TPixel> img) where TPixel : unmanaged, IPixel<TPixel>
 		{
 			Span<byte> imgBytes = MemoryMarshal.Cast<TPixel, byte>(img.data); // TODO: Buffer scanlines for accessing purposes.
 
-			PixelFormat inputFormat = new(ScalarType.Integer, PngHelpers.GetPixelChannels(ihdr.colorType), ihdr.bitDepth / 8);
+			PixelFormat inputFormat = new(ScalarType.Integer, 1, ihdr.bitDepth / 8);
+			PixelFormat inputFormat2 = new(ScalarType.Integer, PngHelpers.GetPixelChannels(ihdr.colorType), ihdr.bitDepth / 8);
 
 			int bytesPerPixel = inputFormat.channels * inputFormat.bytesPerChannel;
 			int stride = (int)ihdr.width * bytesPerPixel + 1;
@@ -193,68 +274,7 @@ namespace ImageLib.Png
 			int bytePerPixelRatio = imgBytesPerPixel / bytesPerPixel; // This will break if TPixel bitdepth is smnaller than source image bitdepth
 
 			Span<byte> tmpPixel = stackalloc byte[bytesPerPixel];
-
-			fixed(byte* dataPtr = data)
-			fixed(byte* imgBytesPtr = imgBytes)
-			{
-				for (int scanline = 0; scanline < ihdr.height; scanline++)
-				{
-					int scanlineStart = scanline * stride;
-					byte filterType = dataPtr[scanlineStart];
-
-					if (filterType < 0 || filterType > 4)
-						throw new Exception($"Unknown filter type {filterType}");
-
-					for (int pixel = 0; pixel < ihdr.width; pixel++)
-					{
-						for (int x = 0; x < bytesPerPixel; x++)
-						{
-							byte xByte = dataPtr[scanline * stride + 1 + (pixel * bytesPerPixel) + x]; // First byte of each scanline is filter type
-
-							tmpPixel[x] = xByte;
-						}
-
-						// PNG is Big Endian
-						if (BitConverter.IsLittleEndian && inputFormat.bytesPerChannel == 2) // TODO: Fix this later
-						{
-							for (int i = 0; i < bytesPerPixel / 2; i++)
-							{
-								var tmp = tmpPixel[i * 2];
-								tmpPixel[i * 2] = tmpPixel[i * 2 + 1];
-								tmpPixel[i * 2 + 1] = tmp;
-							}
-						}
-
-						for (int x = 0; x < bytesPerPixel; x++)
-						{
-							int imgByteOffset = x * bytePerPixelRatio + pixel * imgBytesPerPixel;
-							switch (filterType)
-							{
-								case 1: // Sub
-									tmpPixel[x] += GetPixelByte(imgBytesPtr, imgStride, imgByteOffset - imgBytesPerPixel, scanline);
-									break;
-								case 2: // Up
-									tmpPixel[x] += GetPixelByte(imgBytesPtr, imgStride, imgByteOffset, scanline - 1);
-									break;
-								case 3: // Avg
-									tmpPixel[x] += (byte)((GetPixelByte(imgBytesPtr, imgStride, imgByteOffset - imgBytesPerPixel, scanline) + GetPixelByte(imgBytes, imgStride, imgByteOffset, scanline - 1)) / 2);
-									break;
-								case 4: // Paeth
-									byte a = GetPixelByte(imgBytesPtr, imgStride, imgByteOffset - imgBytesPerPixel, scanline);
-									byte b = GetPixelByte(imgBytesPtr, imgStride, imgByteOffset, scanline - 1);
-									byte c = GetPixelByte(imgBytesPtr, imgStride, imgByteOffset - imgBytesPerPixel, scanline - 1);
-
-									tmpPixel[x] += PngHelpers.PaethPredictor(a, b, c);
-									break;
-								default:
-									break;
-							}
-						}
-
-						PixelOperations.Read(ref img[pixel, scanline], in inputFormat, tmpPixel);
-					}
-				}
-			}
+			Span<byte> tmpPixel2 = stackalloc byte[3];
 		}
 
 		static unsafe void ProcessDataO<TPixel>(ref readonly PngIHDR ihdr, scoped ReadOnlySpan<byte> data, scoped ImageSpan<TPixel> img) where TPixel : unmanaged, IPixel<TPixel>
@@ -503,13 +523,13 @@ namespace ImageLib.Png
 				{
 					if (scanline == 0)
 					{
-						scanlineSpan[i] -= GetPixelByte(output, stride + 1, i - bytesPerPixel, scanline, 1);
+						scanlineSpan[i] -= GetPixelByte_Old(output, stride + 1, i - bytesPerPixel, scanline, 1);
 					}
 					else
 					{
-						byte a = GetPixelByte(output, stride + 1, i - bytesPerPixel, scanline, 1);
-						byte b = GetPixelByte(output, stride + 1, i, scanline - 1, 1);
-						byte c = GetPixelByte(output, stride + 1, i - bytesPerPixel, scanline - 1, 1);
+						byte a = GetPixelByte_Old(output, stride + 1, i - bytesPerPixel, scanline, 1);
+						byte b = GetPixelByte_Old(output, stride + 1, i, scanline - 1, 1);
+						byte c = GetPixelByte_Old(output, stride + 1, i - bytesPerPixel, scanline - 1, 1);
 
 						scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 					}
@@ -530,10 +550,31 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		static unsafe byte GetPixelByte(scoped Span<byte> data, int stride, int x, int y, int xOffset = 0)
+		static unsafe byte GetPixelByte_Old(scoped Span<byte> data, int stride, int x, int y, int xOffset = 0)
 		{
 			ref var dataRef = ref MemoryMarshal.AsRef<byte>(data);
 			return x < 0 || y < 0 ? (byte)0 : Unsafe.Add(ref dataRef, y * stride + x + xOffset);
+		}
+
+		enum PngRow
+		{
+			Current,
+			Previous
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		static unsafe byte GetPixelByte_New(scoped Span<byte> data, int stride, int bytesPerPixel, int pixel, int channel, PngRow row)
+		{
+			ref var dataRef = ref MemoryMarshal.AsRef<byte>(data);
+			int startByte = row == PngRow.Current ? stride : 0;
+			return (pixel == 0 && channel < 0) ? (byte)0 : Unsafe.Add(ref dataRef, startByte + pixel * bytesPerPixel + channel);
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		static unsafe byte GetPixelByte(scoped Span<byte> data, int stride, int x, int y, int xOffset = 0)
+		{
+			ref var dataRef = ref MemoryMarshal.AsRef<byte>(data);
+			return x < stride || y < -1 ? (byte)0 : Unsafe.Add(ref dataRef, y * stride + x + xOffset);
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -578,7 +619,7 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 			idhr.width = reader.ReadUInt32();
 			idhr.height = reader.ReadUInt32();
 			idhr.bitDepth = reader.ReadByte();
-			idhr.colorType = reader.ReadByte();
+			idhr.colorType = (PngColorType)reader.ReadByte();
 			idhr.compressionMethod = reader.ReadByte();
 			idhr.filterMethod = reader.ReadByte();
 			idhr.interlaceMethod = reader.ReadByte();
@@ -592,7 +633,7 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 			data.Add(BitConverter.GetBytes(BinaryPrimitives.ReverseEndianness(ihdr.width)));
 			data.Add(BitConverter.GetBytes(BinaryPrimitives.ReverseEndianness(ihdr.height)));
 			data.Add(ihdr.bitDepth);
-			data.Add(ihdr.colorType);
+			data.Add((byte)ihdr.colorType);
 			data.Add(ihdr.compressionMethod);
 			data.Add(ihdr.filterMethod);
 			data.Add(ihdr.interlaceMethod);
@@ -607,6 +648,28 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 			reader.Read(data.Reserve((int)header.length));
 
 			return default;
+		}
+
+		public static PngPLTE ReadPLTE(ref readonly PngChunkHeader header, DataReader reader, scoped ref SpanStack stack)
+		{
+			if (header.length % 3 != 0)
+				throw new Exception("PLTE length must be divisible by three");
+
+			if (header.length / 3 > 256)
+				throw new Exception("Pallet cannot contain more than 256 colors");
+
+			PngPLTE plte = new();
+			plte.pallet = stack.Alloc<PngPalletEntry>((int)header.length / 3);
+
+			for (int i = 0; i < header.length / 3; i++)
+			{
+				plte.pallet[i] = new();
+				plte.pallet[i].red = reader.ReadByte();
+				plte.pallet[i].green = reader.ReadByte();
+				plte.pallet[i].blue = reader.ReadByte();
+			}
+
+			return plte;
 		}
 
 		public static void WriteIDAT(scoped ReadOnlySpan<byte> data, ZngDeflater deflater, DataWriter writer, int compressionLevel)
@@ -659,35 +722,36 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 			WriteChunk("sRGB", data.AsSpan(), writer);
 		}
 
-		public static int GetPixelChannels(int colorType)
+		public static int GetPixelChannels(PngColorType colorType)
 		{
 			switch (colorType)
 			{
-				case 0:
+				case PngColorType.Greyscale:
 					return 1;
-				case 2:
+				case PngColorType.Truecolor:
+				case PngColorType.IndexedColor:
 					return 3;
-				case 4:
+				case PngColorType.GreyscaleWithAlpha:
 					return 2;
-				case 6:
+				case PngColorType.TruecolorWithAlpha:
 					return 4;
 				default:
-					throw new Exception("Unknown color type");
+					throw new Exception($"Unknown color type {colorType}");
 			}
 		}
 
-		public static byte GetColorType(int channels)
+		public static PngColorType GetColorType(int channels)
 		{
 			switch (channels)
 			{
 				case 1:
-					return 0;
+					return PngColorType.Greyscale;
 				case 2:
-					return 4;
+					return PngColorType.GreyscaleWithAlpha;
 				case 3:
-					return 2;
+					return PngColorType.Truecolor;
 				case 4:
-					return 6;
+					return PngColorType.TruecolorWithAlpha;
 				default:
 					throw new Exception("Unsupported number of channels");
 			}

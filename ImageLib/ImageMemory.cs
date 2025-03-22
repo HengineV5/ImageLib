@@ -67,17 +67,17 @@ namespace ImageLib
 			switch (ext)
 			{
 				case ".png":
-					FormatStorage<PngConfig>.formatHandler.Encode(stream, image, PngConfig.Default);
+					FormatStorage<PngConfig>.formatHandler.Encode(stream, image, PngConfig.FromPixel<TPixel>());
 					break;
 				case ".exr":
-					FormatStorage<ExrConfig>.formatHandler.Encode(stream, image, ExrConfig.Default);
+					FormatStorage<ExrConfig>.formatHandler.Encode(stream, image, ExrConfig.FromPixel<TPixel>());
 					break;
 				case ".jpeg":
 				case ".jpg":
-					FormatStorage<JpgConfig>.formatHandler.Encode(stream, image, JpgConfig.Default);
+					FormatStorage<JpgConfig>.formatHandler.Encode(stream, image, JpgConfig.FromPixel<TPixel>());
 					break;
 				case ".jxl":
-					FormatStorage<JxlConfig>.formatHandler.Encode(stream, image, JxlConfig.Default);
+					FormatStorage<JxlConfig>.formatHandler.Encode(stream, image, JxlConfig.FromPixel<TPixel>());
 					break;
 				default:
 					throw new Exception("Image format not supported");
