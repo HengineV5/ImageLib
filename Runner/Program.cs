@@ -1,19 +1,18 @@
-﻿using ImageLib;
-
-using Rgba32 = MathLib.Rgba<MathLib.UInt8, MathLib.Rgba_Ops_Generic<MathLib.UInt8>>;
-using Rgba64 = MathLib.Rgba<MathLib.UInt16, MathLib.Rgba_Ops_Generic<MathLib.UInt16>>;
-using Rgb24 = MathLib.Rgb<MathLib.UInt8, MathLib.Rgb_Ops_Generic<MathLib.UInt8>>;
-using Rgb48 = MathLib.Rgb<MathLib.UInt16, MathLib.Rgb_Ops_Generic<MathLib.UInt16>>;
-
+﻿using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
+using ImageLib;
+using ImageLib.Jpg;
 using ImageLib.Png;
+using MathLib;
+using Microsoft.Extensions.Logging;
 using System.Buffers;
 using System.IO.Pipelines;
-using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Running;
-using MathLib;
-using System.Runtime.Intrinsics;
 using System.Runtime.CompilerServices;
-using ImageLib.Jpg;
+using System.Runtime.Intrinsics;
+using Rgb24 = MathLib.Rgb<MathLib.UInt8, MathLib.Rgb_Ops_Generic<MathLib.UInt8>>;
+using Rgb48 = MathLib.Rgb<MathLib.UInt16, MathLib.Rgb_Ops_Generic<MathLib.UInt16>>;
+using Rgba32 = MathLib.Rgba<MathLib.UInt8, MathLib.Rgba_Ops_Generic<MathLib.UInt8>>;
+using Rgba64 = MathLib.Rgba<MathLib.UInt16, MathLib.Rgba_Ops_Generic<MathLib.UInt16>>;
 
 namespace Runner
 {
@@ -24,6 +23,22 @@ namespace Runner
 #if RELEASE
 			BenchmarkRunner.Run<ImageBenchmarks>();
 #else
+			using ILoggerFactory factory = LoggerFactory.Create(builder =>
+			{
+				builder.AddSimpleConsole(options =>
+				{
+					options.IncludeScopes = true;
+					options.SingleLine = true;
+					options.TimestampFormat = "hh:mm:ss ";
+				});
+
+				builder.SetMinimumLevel(LogLevel.Debug);
+			});
+
+			ImageLibLog.SetLoggerFactory(factory);
+
+			Console.WriteLine("Starting");
+
 			//PngReader reader = new(new FileStream("Images/Test.png", FileMode.Open));
 			//var pngData = File.ReadAllBytes("Images/Png/Test2.png");
 
@@ -33,7 +48,7 @@ namespace Runner
 			//var img = Image.Load<Rgb24>("Images/Png/PNG_test.png");
 			//var img = Image.Load<Rgba32>("Images/Png/Test2.png");
 			//var img = Image.Load<Rgb48>("Images/Png/Big.png");
-			var img = Image.Load<Rgb48>("Images/Png/DuckCM.png");
+			var img = Image.Load<Rgba32>("Images/Png/Gold.png");
 			//var img = Image.Load<Rgba32>("Images/Exr/AllHalfValues.exr");
 			//var img = Image.Load<Rgba32, JpgConfig>("Images/Jpg/Known.jpg");
 			//var img = Image.Load<Rgba32, JpgConfig>("Images/Jpg/Test.jpeg");

@@ -1,4 +1,5 @@
 ﻿using MathLib;
+using Microsoft.Extensions.Logging;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
@@ -13,6 +14,30 @@ using ZlibNGSharpMinimal.Inflate;
 
 namespace ImageLib.Png
 {
+	static partial class PngLoggerExtensionMethods
+	{
+		[LoggerMessage(Level = LogLevel.Debug, Message = "Starting PNG encode.")]
+		public static partial void StartEncode(this ILogger logger);
+
+		[LoggerMessage(Level = LogLevel.Debug, Message = "Starting PNG decode.")]
+		public static partial void StartDecode(this ILogger logger);
+
+		[LoggerMessage(Level = LogLevel.Trace, Message = "Chunk '{chunk}' parsed.")]
+		public static partial void LogChunkParsed(this ILogger logger, string chunk);
+
+		[LoggerMessage(Level = LogLevel.Trace, Message = "Chunk '{chunk}' skipped.")]
+		public static partial void LogChunkSkipped(this ILogger logger, string chunk);
+
+		[LoggerMessage(Level = LogLevel.Debug, Message = "Size: ({width}, {height}) BitDepth: {bitDepth}, ColorType: {colorType}, CompressionMethod: {compressionMethod}, FilterMethod: {filterMethod}, InterlaceMethod: {interlaceMethod}")]
+		public static partial void LogIHDR(this ILogger logger, uint width, uint height, byte bitDepth, PngColorType colorType, byte compressionMethod, byte filterMethod, byte interlaceMethod);
+
+		[LoggerMessage(Level = LogLevel.Debug, Message = "Channels: {channels}, BytesPerPixel: {bytesPerPixel}, Stride: {stride}, ImageSize: {imageSize}")]
+		public static partial void LogDecodeProcess(this ILogger logger, int channels, int bytesPerPixel, int stride, int imageSize);
+
+		public static void LogIHDR(this ILogger logger, ref readonly PngIHDR ihdr)
+			=> logger.LogIHDR(ihdr.width, ihdr.height, ihdr.bitDepth, ihdr.colorType, ihdr.compressionMethod, ihdr.filterMethod, ihdr.interlaceMethod);
+	}
+
 	public class PngFormat : IFormatHandler<PngConfig>
 	{
 		public static PngFormat Instance => new();
@@ -49,6 +74,8 @@ namespace ImageLib.Png
 
 		public unsafe void Decode<TPixel>(Stream stream, scoped ImageSpan<TPixel> image) where TPixel : unmanaged, IPixel<TPixel>
 		{
+			ImageLibLog.pngLogger.StartDecode();
+
 			using DataReader reader = new DataReader(stream);
 
 			Span<byte> signature = stackalloc byte[8];
@@ -87,30 +114,38 @@ namespace ImageLib.Png
 						if (image.Width < ihdr.width || image.Height < ihdr.height)
 							throw new Exception("Provided image span is too small.");
 
-						if (TPixel.BitDepth < ihdr.bitDepth)
-							throw new Exception("Cannot load image into frame with a lower bitdepth.");
-
 						int imgByteSize = PngHelpers.GetPixelChannels(ihdr.colorType) * (ihdr.bitDepth / 8) * (image.Width + 1) * image.Height;
 						compressedData = new(stack.Alloc<byte>(imgByteSize));
 						uncompressedData = stack.Alloc<byte>(imgByteSize);
 
+						ImageLibLog.pngLogger.LogChunkParsed(header.chunkType);
+						ImageLibLog.pngLogger.LogIHDR(in ihdr);
 						break;
 					case "IDAT":
 						PngIDAT idat = PngHelpers.ReadIDAT(in header, reader, ref compressedData);
+
+						ImageLibLog.pngLogger.LogChunkParsed(header.chunkType);
 						break;
 					case "PLTE":
 						plte = PngHelpers.ReadPLTE(in header, reader, ref stack);
+
+						ImageLibLog.pngLogger.LogChunkParsed(header.chunkType);
 						break;
 					case "sRGB":
 						PngsRGB srgb = PngHelpers.ReadsRGB(in header, reader);
+
+						ImageLibLog.pngLogger.LogChunkParsed(header.chunkType);
 						break;
 					case "iCCP":
 						PngHelpers.ReadiCCP(in header, INFLATER, reader);
+
+						ImageLibLog.pngLogger.LogChunkParsed(header.chunkType);
 						break;
 					default:
 						// Skip unknown segments.
 						reader.Seek(reader.Position + header.length);
 
+						ImageLibLog.pngLogger.LogChunkSkipped(header.chunkType);
 						break;
 				}
 
@@ -136,6 +171,8 @@ namespace ImageLib.Png
 
 		public void Encode<TPixel>(Stream stream, scoped ImageSpan<TPixel> image, ref readonly PngConfig config) where TPixel : unmanaged, IPixel<TPixel>
 		{
+			ImageLibLog.pngLogger.StartEncode();
+
 			using DataWriter writer = new DataWriter(stream);
 
 			writer.Write(PNG_SIGNATURE);
@@ -186,6 +223,8 @@ namespace ImageLib.Png
 			int channels = inputFormat.channels;
 			int bytesPerPixel = inputFormat.channels * inputFormat.bytesPerChannel;
 			int stride = (int)ihdr.width * bytesPerPixel;
+
+			ImageLibLog.pngLogger.LogDecodeProcess(channels, bytesPerPixel, stride, data.Length);
 
 			int buffSize = stride * 2;
 			scoped Span<byte> rowBuff = buffSize <= 1024 * 4 ? stackalloc byte[buffSize] : stack.Alloc<byte>(buffSize);
@@ -728,7 +767,7 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 			{
 				case PngColorType.Greyscale:
 					return 1;
-				case PngColorType.Truecolor:
+				case PngColorType.TrueColor:
 				case PngColorType.IndexedColor:
 					return 3;
 				case PngColorType.GreyscaleWithAlpha:
@@ -749,7 +788,7 @@ scanlineSpan[i] -= PngHelpers.PaethPredictor(a, b, c);
 				case 2:
 					return PngColorType.GreyscaleWithAlpha;
 				case 3:
-					return PngColorType.Truecolor;
+					return PngColorType.TrueColor;
 				case 4:
 					return PngColorType.TruecolorWithAlpha;
 				default:

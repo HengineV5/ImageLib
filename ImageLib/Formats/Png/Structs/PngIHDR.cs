@@ -3,7 +3,7 @@
 	public enum PngColorType
 	{
 		Greyscale = 0,
-		Truecolor = 2,
+		TrueColor = 2,
 		IndexedColor = 3,
 		GreyscaleWithAlpha = 4,
 		TruecolorWithAlpha = 6

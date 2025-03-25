@@ -7,13 +7,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	<LangVersion>preview</LangVersion>
 	<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-	<Version>0.0.5</Version>
+	<Version>0.0.9</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="carlst99.ZlibNGSharp" Version="1.2.0" />
     <PackageReference Include="MathLib" Version="0.0.20" />
     <PackageReference Include="MathLib.Imaging" Version="0.0.20" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.3" />
     <PackageReference Include="UtilLib" Version="0.0.24" />
   </ItemGroup>
 

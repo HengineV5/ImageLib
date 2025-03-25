@@ -46,12 +46,16 @@ namespace ImageLib
 				else
 				{
 					int maxBytesPerChannel = int.Max(inputFormat.bytesPerChannel, outputFormat.bytesPerChannel);
-					Span<byte> tmpChannel = stackalloc byte[maxBytesPerChannel];
+					//Span<byte> tmpChannel = stackalloc byte[maxBytesPerChannel];
+					Span<byte> tmpChannel = stackalloc byte[sizeof(long)];
 
 					for (int i = 0; i < channelsToWrite; i++)
 					{
 						input.Slice(i * inputFormat.bytesPerChannel, inputFormat.bytesPerChannel).TryCopyTo(tmpChannel);
-						//ScaleChannel(outputFormat.bytesPerChannel - bytesPerChannel, ref MemoryMarshal.AsRef<long>(tmpChannel));
+
+						if (outputFormat.bytesPerChannel < inputFormat.bytesPerChannel) // Only downscale channels
+							ScaleChannel(outputFormat.bytesPerChannel - inputFormat.bytesPerChannel, ref MemoryMarshal.AsRef<long>(tmpChannel));
+
 						tmpChannel.Slice(0, outputFormat.bytesPerChannel).TryCopyTo(output.Slice(i * outputFormat.bytesPerChannel, outputFormat.bytesPerChannel));
 					}
 				}
