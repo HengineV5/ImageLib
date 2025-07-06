@@ -1,21 +1,49 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-	<LangVersion>preview</LangVersion>
-	<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-	<Version>0.0.9</Version>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<LangVersion>preview</LangVersion>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<Version>0.0.9</Version>
+		<Configurations>Debug;Release;Debug (local-deps)</Configurations>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="carlst99.ZlibNGSharp" Version="1.2.0" />
-    <PackageReference Include="MathLib" Version="0.0.20" />
-    <PackageReference Include="MathLib.Imaging" Version="0.0.20" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.3" />
-    <PackageReference Include="UtilLib" Version="0.0.24" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="carlst99.ZlibNGSharp" Version="1.2.0" />
+		<PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.3" />
+	</ItemGroup>
 
+	<!-- 
+	For developing locally, by cloning all repos and putting them in the same directory:
+		henke/
+			ImageLib/
+			MathLib/
+			UtilLib/
+	This setting allows you to use local projects instead of NuGet packages.  
+
+	NOTE:
+		Visual Studio will refuse to resolve include paths outside current directory.
+		As such, whenever changing TO this profile, you must run the following command
+		in PowerShell/terminal:
+			`dotnet restore -p:UseLocalProjects=true`
+		It is persistent accross clean, rebuild, relaunching Visual Studio, etc. Only
+		when changing to this profile.
+	-->
+	<PropertyGroup Condition="'$(Configuration)'=='Debug (local-deps)'">
+		<UseLocalProjects>true</UseLocalProjects>
+	</PropertyGroup>
+	<ItemGroup Condition="'$(UseLocalProjects)' != 'true'">
+		<PackageReference Include="MathLib" Version="0.0.20" />
+		<PackageReference Include="MathLib.Imaging" Version="0.0.20" />
+		<PackageReference Include="UtilLib" Version="0.0.24" />
+	</ItemGroup>
+	<ItemGroup Condition="'$(UseLocalProjects)' == 'true'">
+		<ProjectReference Include="..\..\MathLib\MathLib\MathLib.csproj" />
+		<ProjectReference Include="..\..\MathLib\MathLib.Imaging\MathLib.Imaging.csproj" />
+		<ProjectReference Include="..\..\UtilLib\UtilLib\UtilLib.csproj" />
+		<ProjectReference Include="..\..\MathLib\MathLib\MathLib.csproj" />
+	</ItemGroup>
 </Project>
