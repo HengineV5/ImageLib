@@ -44,6 +44,5 @@
 		<ProjectReference Include="..\..\MathLib\MathLib\MathLib.csproj" />
 		<ProjectReference Include="..\..\MathLib\MathLib.Imaging\MathLib.Imaging.csproj" />
 		<ProjectReference Include="..\..\UtilLib\UtilLib\UtilLib.csproj" />
-		<ProjectReference Include="..\..\MathLib\MathLib\MathLib.csproj" />
 	</ItemGroup>
 </Project>
