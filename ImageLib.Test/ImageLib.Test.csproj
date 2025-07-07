@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ImageLib\ImageLib.csproj" />
+    <PackageReference Include="JunitXml.TestLogger" Version="6.1.0" />
   </ItemGroup>
 
   <ItemGroup>
