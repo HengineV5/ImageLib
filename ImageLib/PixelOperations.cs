@@ -52,10 +52,6 @@ namespace ImageLib
 					for (int i = 0; i < channelsToWrite; i++)
 					{
 						input.Slice(i * inputFormat.bytesPerChannel, inputFormat.bytesPerChannel).TryCopyTo(tmpChannel);
-
-						if (outputFormat.bytesPerChannel < inputFormat.bytesPerChannel) // Only downscale channels
-							ScaleChannel(outputFormat.bytesPerChannel - inputFormat.bytesPerChannel, ref MemoryMarshal.AsRef<long>(tmpChannel));
-
 						tmpChannel.Slice(0, outputFormat.bytesPerChannel).TryCopyTo(output.Slice(i * outputFormat.bytesPerChannel, outputFormat.bytesPerChannel));
 					}
 				}
