@@ -6,14 +6,30 @@
 		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<LangVersion>preview</LangVersion>
-		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<Version>0.0.9</Version>
 		<Configurations>Debug;Release;Debug (local-deps)</Configurations>
+
+		<!-- MinVer settings -->
+		<MinVerTagPrefix>v</MinVerTagPrefix>
+
+		<!-- NuGet -->
+		<PackageId>Henke.ImageLib</PackageId>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<Authors>Henrik9864</Authors>
+		<Company>Henke</Company>
+		<RepositoryUrl>https://github.com/HengineV5/ImageLib.git</RepositoryUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<RepositoryType>git</RepositoryType>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="MinVer" Version="6.0.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+		</PackageReference>
 		<PackageReference Include="carlst99.ZlibNGSharp" Version="1.2.0" />
 		<PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.3" />
+		<None Include="README.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
 	<!-- 
@@ -36,9 +52,9 @@
 		<UseLocalProjects>true</UseLocalProjects>
 	</PropertyGroup>
 	<ItemGroup Condition="'$(UseLocalProjects)' != 'true'">
-		<PackageReference Include="MathLib" Version="0.0.20" />
-		<PackageReference Include="MathLib.Imaging" Version="0.0.20" />
-		<PackageReference Include="UtilLib" Version="0.0.24" />
+		<PackageReference Include="Henke.MathLib" Version="0.0.26" />
+		<PackageReference Include="Henke.MathLib.Imaging" Version="0.0.26" />
+		<PackageReference Include="Henke.UtilLib" Version="0.0.36" />
 	</ItemGroup>
 	<ItemGroup Condition="'$(UseLocalProjects)' == 'true'">
 		<ProjectReference Include="..\..\MathLib\MathLib\MathLib.csproj" />
