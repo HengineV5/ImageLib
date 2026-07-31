@@ -28,7 +28,7 @@
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="carlst99.ZlibNGSharp" Version="1.2.0" />
-		<PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.3" />
+		<PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.2" />
 		<None Include="README.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
