@@ -1,0 +1,22 @@
+<Project>
+
+	<!--
+	Local-deps source switch — every project in this repo defaults to
+	ProjectReferences against sibling checkouts instead of the published NuGet
+	packages:
+		henke/
+			ImageLib/
+			MathLib/
+			UtilLib/
+	To build against the published NuGet packages instead (e.g. to sanity-check
+	what will actually get published), copy local.props.example to local.props
+	and set UseLocalProjects to false.
+	CI always builds against NuGet packages: GitHub Actions sets CI=true, and a
+	single-repo CI checkout has no sibling directories to reference anyway.
+	-->
+	<Import Project="local.props" Condition="Exists('$(MSBuildThisFileDirectory)local.props')" />
+	<PropertyGroup Condition="'$(UseLocalProjects)' == '' And '$(CI)' != 'true'">
+		<UseLocalProjects>true</UseLocalProjects>
+	</PropertyGroup>
+
+</Project>

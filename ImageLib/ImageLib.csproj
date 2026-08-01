@@ -6,7 +6,6 @@
 		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<LangVersion>preview</LangVersion>
-		<Configurations>Debug;Release;Debug (local-deps)</Configurations>
 
 		<!-- MinVer settings -->
 		<MinVerTagPrefix>v</MinVerTagPrefix>
@@ -32,25 +31,7 @@
 		<None Include="README.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
-	<!-- 
-	For developing locally, by cloning all repos and putting them in the same directory:
-		henke/
-			ImageLib/
-			MathLib/
-			UtilLib/
-	This setting allows you to use local projects instead of NuGet packages.  
-
-	NOTE:
-		Visual Studio will refuse to resolve include paths outside current directory.
-		As such, whenever changing TO this profile, you must run the following command
-		in PowerShell/terminal:
-			`dotnet restore -p:UseLocalProjects=true`
-		It is persistent accross clean, rebuild, relaunching Visual Studio, etc. Only
-		when changing to this profile.
-	-->
-	<PropertyGroup Condition="'$(Configuration)'=='Debug (local-deps)'">
-		<UseLocalProjects>true</UseLocalProjects>
-	</PropertyGroup>
+	<!-- Local-deps source switch: see Directory.Build.props / local.props.example -->
 	<ItemGroup Condition="'$(UseLocalProjects)' != 'true'">
 		<PackageReference Include="Henke.MathLib" Version="0.0.26" />
 		<PackageReference Include="Henke.MathLib.Imaging" Version="0.0.26" />
